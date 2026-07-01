@@ -1,0 +1,13 @@
+{
+  "required": false,
+  "package": "me.cortex.voxy.client.mixin.fakesight",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "MixinIntegratedServer",
+    "MixinOptions",
+    "MixinShaderLoader"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}
