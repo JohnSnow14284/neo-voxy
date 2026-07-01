@@ -1,0 +1,380 @@
+diff --git a/src/main/java/me/cortex/voxy/client/core/model/ModelFactory.java b/src/main/java/me/cortex/voxy/client/core/model/ModelFactory.java
+index 7c669b6..d7205ca 100644
+--- a/src/main/java/me/cortex/voxy/client/core/model/ModelFactory.java
++++ b/src/main/java/me/cortex/voxy/client/core/model/ModelFactory.java
+@@ -13,7 +13,6 @@ import me.cortex.voxy.common.Logger;
+ import me.cortex.voxy.common.util.MemoryBuffer;
+ import me.cortex.voxy.common.util.Pair;
+ import me.cortex.voxy.common.world.other.Mapper;
+-import me.cortex.voxy.commonImpl.compat.DomumOrnamentumCompat;
+ import net.minecraft.client.Minecraft;
+ import net.minecraft.client.color.block.BlockColor;
+ import net.minecraft.client.color.block.BlockColors;
+@@ -164,8 +163,7 @@ public class ModelFactory {
+ 
+ 
+         var blockState = this.mapper.getBlockStateFromBlockId(blockId);
+-        boolean isDomumMaterialVariant = DomumOrnamentumCompat.hasModelData(blockId);
+-        if ((!isDomumMaterialVariant) && blockState.getBlock() instanceof StairBlock sb) {
++        if (blockState.getBlock() instanceof StairBlock sb) {
+                 /*
+                 if (sb.baseState.hasProperty(BlockStateProperties.WATERLOGGED)) {
+                     blockState = sb.baseState.setValue(BlockStateProperties.WATERLOGGED, blockState.getValue(BlockStateProperties.WATERLOGGED));
+@@ -290,13 +288,6 @@ public class ModelFactory {
+         if (layer == null) {
+             layer = RenderType.solid();
+         }
+-        // Domum Ornamentum material variants can contain cutout-like material
+-        // quads even when the source block state itself reports a solid layer.
+-        // Treat only those virtual ids as cutout for the offline texture analysis
+-        // so transparent pixels do not turn into full opaque LOD panels.
+-        if (DomumOrnamentumCompat.hasModelData(bake.blockId) && layer != RenderType.translucent()) {
+-            layer = RenderType.cutout();
+-        }
+ 
+ 
+         var bakeResult = this.processTextureBakeResult(bake.blockId, bake.state, textureData, isShaded, hasDarkenedTextures, layer);
+@@ -410,7 +401,6 @@ public class ModelFactory {
+         //TODO: add thing for `blockState.hasEmissiveLighting()` and `blockState.getLuminance()`
+ 
+         boolean isFluid = isFluidBlockState(blockState);
+-        boolean isDomumMaterialVariant = DomumOrnamentumCompat.hasModelData(blockId);
+         int modelId = -1;
+ 
+ 
+@@ -532,9 +522,6 @@ public class ModelFactory {
+         metadata |= ((!isFluid) && !blockState.getFluidState().isEmpty())?8:0;//Has a fluid state accosiacted with it and is not itself a fluid
+         metadata |= isFluid?16:0;//Is a fluid
+ 
+-        if (isDomumMaterialVariant) {
+-            cullsSame = false;
+-        }
+         metadata |= cullsSame?32:0;
+ 
+         boolean fullyOpaque = true;
+@@ -559,12 +546,6 @@ public class ModelFactory {
+ 
+             boolean faceCoversFullBlock = faceSize[0] == 0 && faceSize[2] == 0 &&
+                     faceSize[1] == (MODEL_TEXTURE_SIZE-1) && faceSize[3] == (MODEL_TEXTURE_SIZE-1);
+-            if (isDomumMaterialVariant) {
+-                // Domum models are frequently partial/cutout retextured geometry.
+-                // A single 16x16 projected LOD face that happens to fill the view
+-                // must not be treated as a full cube face for occlusion.
+-                faceCoversFullBlock = false;
+-            }
+ 
+             //TODO: use faceSize and the depths to compute if mesh can be correctly rendered
+ 
+@@ -580,9 +561,6 @@ public class ModelFactory {
+             if (occludesFace) {
+                 occludesFace &= ((float)writeCount)/(MODEL_TEXTURE_SIZE * MODEL_TEXTURE_SIZE) > 0.9;// only occlude if the face covers more than 90% of the face
+             }
+-            if (isDomumMaterialVariant) {
+-                occludesFace = false;
+-            }
+             metadata |= occludesFace?1:0;
+             fullyOpaque &= occludesFace;
+ 
+@@ -591,9 +569,6 @@ public class ModelFactory {
+             boolean canBeOccluded = true;
+             //TODO: make this an option on how far/close
+             canBeOccluded &= offset < 0.3;//If the face is rendered far away from the other face, then it cant be occluded
+-            if (isDomumMaterialVariant) {
+-                canBeOccluded = false;
+-            }
+ 
+             metadata |= canBeOccluded?4:0;
+ 
+@@ -620,9 +595,6 @@ public class ModelFactory {
+             //Stuff like fences are solid, however they have extra side piece that mean it needs to have discard on
+             int area = (faceSize[1]-faceSize[0]+1) * (faceSize[3]-faceSize[2]+1);
+             boolean needsAlphaDiscard = ((float)writeCount)/area<0.9;//If the amount of area covered by written pixels is less than a threashold, disable discard as its not needed
+-            if (isDomumMaterialVariant) {
+-                needsAlphaDiscard = true;
+-            }
+ 
+             needsAlphaDiscard |= layer != RenderType.solid();
+             needsAlphaDiscard &= layer != RenderType.translucent();//Translucent doesnt have alpha discard
+diff --git a/src/main/java/me/cortex/voxy/client/core/model/bakery/ReuseVertexConsumer.java b/src/main/java/me/cortex/voxy/client/core/model/bakery/ReuseVertexConsumer.java
+index acb8643..3a54910 100644
+--- a/src/main/java/me/cortex/voxy/client/core/model/bakery/ReuseVertexConsumer.java
++++ b/src/main/java/me/cortex/voxy/client/core/model/bakery/ReuseVertexConsumer.java
+@@ -100,22 +100,6 @@ public final class ReuseVertexConsumer implements VertexConsumer {
+     }
+ 
+     public ReuseVertexConsumer quad(BakedQuad quad, boolean forceSolid, RenderType layer, BlockState state) {
+-        return this.quadInternal(quad, forceSolid, layer, state, false);
+-    }
+-
+-    /**
+-     * Domum Ornamentum contains several materially-textured models whose JSON
+-     * geometry intentionally extends outside the local block cube.  Voxy bakes a
+-     * per-block impostor texture, so those overhanging vertices project as full
+-     * cube faces or duplicated side cards in LOD.  Cropping only the Domum
+-     * offline bake keeps normal blocks allocation-free and avoids changing the
+-     * world conversion hot path.
+-     */
+-    public ReuseVertexConsumer quadClampedToUnitBlock(BakedQuad quad, boolean forceSolid, RenderType layer, BlockState state) {
+-        return this.quadInternal(quad, forceSolid, layer, state, true);
+-    }
+-
+-    private ReuseVertexConsumer quadInternal(BakedQuad quad, boolean forceSolid, RenderType layer, BlockState state, boolean clampToUnitBlock) {
+         int meta = 0;
+         meta |= forceSolid?0:(layer!=RenderType.solid()?1:0);//has discard
+ 
+@@ -126,7 +110,7 @@ public final class ReuseVertexConsumer implements VertexConsumer {
+                 meta |= 4;//has tinting, keep Voxy's normal biome/constant tint path
+             }
+         }
+-        return this.quad(quad, meta, tintColour, clampToUnitBlock);
++        return this.quad(quad, meta, tintColour);
+     }
+ 
+     public ReuseVertexConsumer quad(BakedQuad quad, int metadata) {
+@@ -134,10 +118,6 @@ public final class ReuseVertexConsumer implements VertexConsumer {
+     }
+ 
+     public ReuseVertexConsumer quad(BakedQuad quad, int metadata, int tintColour) {
+-        return this.quad(quad, metadata, tintColour, false);
+-    }
+-
+-    private ReuseVertexConsumer quad(BakedQuad quad, int metadata, int tintColour, boolean clampToUnitBlock) {
+         this.anyShaded |= quad.isShade();
+         this.anyDarkendTex |= false;// todo: what actually goes here??
+         this.ensureCanPut();
+@@ -149,15 +129,7 @@ public final class ReuseVertexConsumer implements VertexConsumer {
+             if (tintColour != -1) {
+                 colour = multiplyAbgr(colour, tintColour);
+             }
+-            float x = Float.intBitsToFloat(vertices[j]);
+-            float y = Float.intBitsToFloat(vertices[j + 1]);
+-            float z = Float.intBitsToFloat(vertices[j + 2]);
+-            if (clampToUnitBlock) {
+-                x = clamp01(x);
+-                y = clamp01(y);
+-                z = clamp01(z);
+-            }
+-            this.addVertex(x, y, z);
++            this.addVertex(Float.intBitsToFloat(vertices[j]), Float.intBitsToFloat(vertices[j + 1]), Float.intBitsToFloat(vertices[j + 2]));
+             this.setColor(colour);
+             this.setUv(Float.intBitsToFloat(vertices[j + 4]), Float.intBitsToFloat(vertices[j + 5]));
+ 
+@@ -166,12 +138,6 @@ public final class ReuseVertexConsumer implements VertexConsumer {
+         return this;
+     }
+ 
+-    private static float clamp01(float value) {
+-        if (value <= 0.0f) return 0.0f;
+-        if (value >= 1.0f) return 1.0f;
+-        return value;
+-    }
+-
+     private static int captureTintColour(BlockState state, int tintIndex) {
+         if (state == null || tintIndex <= 0xFF) {
+             return -1;
+diff --git a/src/main/java/me/cortex/voxy/client/core/model/bakery/SoftwareModelTextureBakery.java b/src/main/java/me/cortex/voxy/client/core/model/bakery/SoftwareModelTextureBakery.java
+index dfa03f7..9fcd05e 100644
+--- a/src/main/java/me/cortex/voxy/client/core/model/bakery/SoftwareModelTextureBakery.java
++++ b/src/main/java/me/cortex/voxy/client/core/model/bakery/SoftwareModelTextureBakery.java
+@@ -11,7 +11,6 @@ import me.cortex.voxy.commonImpl.compat.DomumOrnamentumCompat;
+ import net.minecraft.client.Minecraft;
+ import net.minecraft.client.renderer.ItemBlockRenderTypes;
+ import net.minecraft.client.renderer.RenderType;
+-import net.minecraft.client.renderer.block.model.BakedQuad;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.resources.ResourceLocation;
+@@ -37,10 +36,7 @@ import org.lwjgl.system.MemoryUtil;
+ import java.io.IOException;
+ import java.nio.file.Path;
+ import java.util.ArrayList;
+-import java.util.Arrays;
+-import java.util.HashSet;
+ import java.util.List;
+-import java.util.Set;
+ import java.util.concurrent.CompletableFuture;
+ import java.util.concurrent.atomic.AtomicInteger;
+ import java.util.function.Function;
+@@ -110,78 +106,19 @@ public class SoftwareModelTextureBakery {
+                 .getBlockModel(state);
+ 
+         ModelData modelData = DomumOrnamentumCompat.getModelData(blockId, state);
+-        if (modelData == ModelData.EMPTY) {
+-            bakeBlockModelLayer(model, state, layer, modelData, false, false);
+-            return;
+-        }
+-
+-        // Domum Ornamentum can replace different material components with blocks
+-        // using different render layers, for example solid wood plus cutout leaves.
+-        // Baking only ItemBlockRenderTypes.getChunkRenderType(state) drops or
+-        // solidifies some of those quads, which shows up in Voxy as missing faces
+-        // or large extra opaque faces.  Keep this narrow and cheap: only Domum
+-        // virtual material ids use the model's own layer list.
+-        var random = new SingleThreadedRandomSource(42L);
+-        var renderTypes = model.getRenderTypes(state, random, modelData).asList();
+-        if (renderTypes.isEmpty()) {
+-            bakeBlockModelLayer(model, state, layer, modelData, true, true);
+-            return;
+-        }
+-
+-        // The same support quads can be returned by more than one Domum material
+-        // render layer.  Drawing them multiple times changes Voxy's offline
+-        // stencil/depth bake and produces extra or missing LOD faces.  Dedupe only
+-        // in this Domum path so normal block baking stays allocation-free.
+-        Set<Integer> seenQuads = new HashSet<>();
+-        for (RenderType renderType : renderTypes) {
+-            bakeBlockModelLayer(model, state, renderType, modelData, true, true, seenQuads);
+-        }
+-    }
+-
+-    private void bakeBlockModelLayer(net.minecraft.client.resources.model.BakedModel model,
+-                                     BlockState state,
+-                                     RenderType layer,
+-                                     ModelData modelData,
+-                                     boolean useModelData,
+-                                     boolean clampDomumGeometry) {
+-        bakeBlockModelLayer(model, state, layer, modelData, useModelData, clampDomumGeometry, null);
+-    }
+-
+-    private void bakeBlockModelLayer(net.minecraft.client.resources.model.BakedModel model,
+-                                     BlockState state,
+-                                     RenderType layer,
+-                                     ModelData modelData,
+-                                     boolean useModelData,
+-                                     boolean clampDomumGeometry,
+-                                     Set<Integer> seenQuads) {
+         for (Direction direction : new Direction[] { Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH,
+                 Direction.WEST, Direction.EAST, null }) {
+             var random = new SingleThreadedRandomSource(42L);
+-            var quads = useModelData
+-                    ? model.getQuads(state, direction, random, modelData, layer)
+-                    : model.getQuads(state, direction, random);
++            var quads = modelData == ModelData.EMPTY
++                    ? model.getQuads(state, direction, random)
++                    : model.getQuads(state, direction, random, modelData, layer);
+             for (var quad : quads) {
+-                if (seenQuads != null && !seenQuads.add(quadSignature(quad))) {
+-                    continue;
+-                }
+-                var vertexConsumer = layer == RenderType.translucent() ? this.translucentVC : this.opaqueVC;
+-                if (clampDomumGeometry) {
+-                    vertexConsumer.quadClampedToUnitBlock(quad, state.is(BlockTags.LEAVES), layer, state);
+-                } else {
+-                    vertexConsumer.quad(quad, state.is(BlockTags.LEAVES), layer, state);
+-                }
++                (layer == RenderType.translucent() ? this.translucentVC : this.opaqueVC)
++                        .quad(quad, state.is(BlockTags.LEAVES), layer, state);
+             }
+         }
+     }
+ 
+-    private static int quadSignature(BakedQuad quad) {
+-        int result = Arrays.hashCode(quad.getVertices());
+-        result = 31 * result + quad.getDirection().ordinal();
+-        result = 31 * result + quad.getTintIndex();
+-        result = 31 * result + quad.getSprite().contents().name().hashCode();
+-        return result;
+-    }
+-
+     private void bakeFluidState(BlockState state, int face, RenderType layer) {
+         BlockAndTintGetter getter = new BlockAndTintGetter() {
+             @Override
+diff --git a/src/main/java/me/cortex/voxy/commonImpl/compat/DomumOrnamentumCompat.java b/src/main/java/me/cortex/voxy/commonImpl/compat/DomumOrnamentumCompat.java
+index 68ac223..1ea9881 100644
+--- a/src/main/java/me/cortex/voxy/commonImpl/compat/DomumOrnamentumCompat.java
++++ b/src/main/java/me/cortex/voxy/commonImpl/compat/DomumOrnamentumCompat.java
+@@ -54,8 +54,8 @@ public final class DomumOrnamentumCompat {
+         int minY = sectionY << 4;
+         int maxY = minY + 15;
+ 
+-        for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
+-            try {
++        try {
++            for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
+                 if (blockEntity == null || !isDomumBlockEntity(blockEntity)) {
+                     continue;
+                 }
+@@ -65,9 +65,13 @@ public final class DomumOrnamentumCompat {
+                     continue;
+                 }
+ 
+-                ModelData originalModelData = blockEntity.getModelData();
+-                Object textureData = extractTextureData(blockEntity, originalModelData);
+-                if (textureData == null) {
++                ModelData modelData = blockEntity.getModelData();
++                if (modelData == null || modelData == ModelData.EMPTY) {
++                    continue;
++                }
++
++                Object variantKey = extractVariantKey(blockEntity, modelData);
++                if (variantKey == null) {
+                     continue;
+                 }
+ 
+@@ -79,12 +83,7 @@ public final class DomumOrnamentumCompat {
+                     continue;
+                 }
+ 
+-                ModelData modelData = ensureMaterialModelData(originalModelData, textureData);
+-                if (modelData == ModelData.EMPTY) {
+-                    continue;
+-                }
+-
+-                int mappedId = mapper.getIdForBlockStateVariant(state, textureData);
++                int mappedId = mapper.getIdForBlockStateVariant(state, variantKey);
+                 MODEL_DATA_BY_BLOCK_ID.putIfAbsent(mappedId, modelData);
+ 
+                 if (mappedIds == null) {
+@@ -92,10 +91,9 @@ public final class DomumOrnamentumCompat {
+                 }
+                 int localIndex = lx | (lz << 4) | (ly << 8);
+                 mappedIds[localIndex] = mappedId;
+-            } catch (Throwable ignored) {
+-                // Keep the rest of the section working if one Domum block entity is
+-                // temporarily missing client model data or is otherwise invalid.
+             }
++        } catch (Throwable ignored) {
++            mappedIds = null;
+         }
+ 
+         if (mappedIds == null) {
+@@ -157,33 +155,18 @@ public final class DomumOrnamentumCompat {
+         return name.startsWith(DOMUM_PACKAGE);
+     }
+ 
+-    public static boolean hasModelData(int blockId) {
+-        return LOADED && MODEL_DATA_BY_BLOCK_ID.containsKey(blockId);
+-    }
+-
+-    private static Object extractTextureData(BlockEntity blockEntity, ModelData modelData) {
++    private static Object extractVariantKey(BlockEntity blockEntity, ModelData modelData) {
+         Object textureData = extractTextureDataFromModelData(modelData);
+         if (textureData != null) {
+             return textureData;
+         }
+ 
+-        return extractTextureDataFromBlockEntity(blockEntity);
+-    }
+-
+-    @SuppressWarnings({"rawtypes", "unchecked"})
+-    private static ModelData ensureMaterialModelData(ModelData modelData, Object textureData) {
+-        ModelProperty property = getMaterialTextureProperty();
+-        if (property == null || textureData == null) {
+-            return ModelData.EMPTY;
+-        }
+-        try {
+-            if (modelData != null && modelData != ModelData.EMPTY && modelData.has(property)) {
+-                return modelData;
+-            }
+-            return ModelData.builder().with(property, textureData).build();
+-        } catch (Throwable ignored) {
+-            return ModelData.EMPTY;
++        textureData = extractTextureDataFromBlockEntity(blockEntity);
++        if (textureData != null) {
++            return textureData;
+         }
++
++        return null;
+     }
+ 
+     @SuppressWarnings({"rawtypes", "unchecked"})

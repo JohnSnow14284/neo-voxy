@@ -15,7 +15,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.BlockTags;
-import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.BlockAndTintGetter;
 import net.minecraft.world.level.ColorResolver;
 import net.minecraft.world.level.LightLayer;
@@ -52,15 +51,12 @@ import static org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER;
 import static org.lwjgl.opengl.GL30C.glBindFramebuffer;
 
 public class SoftwareModelTextureBakery {
-
+    // Note: the first bit of metadata is if alpha discard is enabled
     private static final Matrix4f[] VIEWS = new Matrix4f[6];
 
     private final ReuseVertexConsumer opaqueVC = new ReuseVertexConsumer();
     private final ReuseVertexConsumer translucentVC = new ReuseVertexConsumer(1/*has discard*/);
     private final SoftwareRasterizer rasterizer = new SoftwareRasterizer(ModelFactory.MODEL_TEXTURE_SIZE);
-
-   
-    private static final int VANILLA_WATER_LOD_MIN_ALPHA = 144;
 
 
     public SoftwareModelTextureBakery() {
@@ -189,11 +185,12 @@ public class SoftwareModelTextureBakery {
 
             @Override
             public float getShade(Direction direction, boolean bl) {
-               
-                if (ModelFactory.isLumiseneFluidBlockState(state)) {
-                    return 1.0f;
-                }
-                return getVanillaLikeFluidShade(direction);
+                // Match upstream Fabric Voxy's software fluid bake: the temporary
+                // world reports zero shade and the fluid vertex colour is ignored
+                // by ReuseVertexConsumer during renderLiquid().  The baked texture
+                // then keeps the atlas water alpha instead of storing a darkened or
+                // over-opaque vertex-coloured result.
+                return 0;
             }
         
         };
@@ -206,23 +203,18 @@ public class SoftwareModelTextureBakery {
         } else {
             this.opaqueVC.setDefaultMeta(this.opaqueVC.getDefaultMeta()&~1);//remove discard
         }
-        Minecraft.getInstance().getBlockRenderer().renderLiquid(BlockPos.ZERO, getter, vc, state, state.getFluidState());
-        this.translucentVC.setDefaultMeta(0);//Reset default meta
-        this.opaqueVC.setDefaultMeta(0);//Reset default meta
-    }
-
-
-    private static float getVanillaLikeFluidShade(Direction direction) {
-        if (direction == null) {
-            return 1.0f;
+        this.opaqueVC.setIgnoreVertexColor(true);
+        this.translucentVC.setIgnoreVertexColor(true);
+        try {
+            Minecraft.getInstance().getBlockRenderer().renderLiquid(BlockPos.ZERO, getter, vc, state, state.getFluidState());
+        } finally {
+            this.opaqueVC.setIgnoreVertexColor(false);
+            this.translucentVC.setIgnoreVertexColor(false);
+            this.translucentVC.setDefaultMeta(0);//Reset default meta
+            this.opaqueVC.setDefaultMeta(0);//Reset default meta
         }
-        return switch (direction) {
-            case DOWN -> 0.5f;
-            case UP -> 1.0f;
-            case NORTH, SOUTH -> 0.8f;
-            case WEST, EAST -> 0.6f;
-        };
     }
+
 
     private static boolean shouldReturnAirForFluid(BlockPos pos, int face) {
         var fv = Direction.from3DDataValue(face).getNormal();
@@ -328,7 +320,6 @@ public class SoftwareModelTextureBakery {
                 this.rasterizer.raster(VIEWS[i], this.opaqueVC);
                 this.rasterizer.setBlending(true);
                 this.rasterizer.raster(VIEWS[i], this.translucentVC);
-                postProcessFluidLodColour(state, this.rasterizer.getRawFramebuffer());
                 UnsafeUtil.memcpy(this.rasterizer.getRawFramebuffer(), outputBuffer + (SINGLE_FACE_OUTPUT_SIZE * i));
             }
         }
@@ -336,30 +327,6 @@ public class SoftwareModelTextureBakery {
         return (isAnyShaded ? 1 : 0) | (isAnyDarkend ? 2 : 0) | (anyTranslucent ? 4 : 0) | (anyDiscard ? 8 : 0);
     }
 
-    private static void postProcessFluidLodColour(BlockState state, long[] framebuffer) {
-        if (!shouldClampWaterLodAlpha(state)) {
-            return;
-        }
-
-        for (int i = 0; i < framebuffer.length; i++) {
-            long packed = framebuffer[i];
-            int colour = (int) packed;
-            int alpha = colour >>> 24;
-            if (alpha == 0 || alpha >= VANILLA_WATER_LOD_MIN_ALPHA) {
-                continue;
-            }
-
-            colour = (colour & 0x00FFFFFF) | (VANILLA_WATER_LOD_MIN_ALPHA << 24);
-            framebuffer[i] = (packed & 0xFFFFFFFF00000000L) | Integer.toUnsignedLong(colour);
-        }
-    }
-
-    private static boolean shouldClampWaterLodAlpha(BlockState state) {
-        FluidState fluidState = state.getFluidState();
-        return !fluidState.isEmpty()
-                && fluidState.is(FluidTags.WATER)
-                && !ModelFactory.isLumiseneFluidBlockState(state);
-    }
 
     static {
         // the face/direction is the face (e.g. down is the down face)

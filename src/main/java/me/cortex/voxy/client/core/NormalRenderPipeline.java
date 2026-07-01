@@ -31,9 +31,6 @@ import static org.lwjgl.opengl.GL11C.glDisable;
 import static org.lwjgl.opengl.GL11C.glEnable;
 import static org.lwjgl.opengl.GL14C.glBlendFuncSeparate;
 import static org.lwjgl.opengl.GL20C.glUniform4f;
-import static org.lwjgl.opengl.GL42C.GL_FRAMEBUFFER_BARRIER_BIT;
-import static org.lwjgl.opengl.GL42C.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT;
-import static org.lwjgl.opengl.GL42C.glMemoryBarrier;
 import static org.lwjgl.opengl.GL30C.*;
 import static org.lwjgl.opengl.GL43.GL_DEPTH_STENCIL_TEXTURE_MODE;
 import static org.lwjgl.opengl.GL45C.glBindTextureUnit;
@@ -91,11 +88,6 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
     protected void postOpaquePreTranslucent(Viewport<?> viewport, int sourceFrameBuffer) {
         GPUTiming.INSTANCE.marker("ao");
         this.ssao.computeSSAO(viewport, this.colourSSAOTex, this.colourTex, this.fb.getDepthTex(), sourceFrameBuffer);
-        // SSAO writes colourSSAOTex through imageStore.  Make those writes visible
-        // before the same texture is used as a framebuffer colour attachment for
-        // translucent terrain.  Some drivers otherwise blend translucent water
-        // against stale/black texels.
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_FRAMEBUFFER_BARRIER_BIT);
         glBindFramebuffer(GL_FRAMEBUFFER, this.fbSSAO.id);
     }
 
@@ -132,13 +124,7 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
         //Unbelievably jank hack, only blit out to the framebuffer if we are rendering fog
         if (!fogCoversAllRendering) {
             glEnable(GL_BLEND);
-            // colourSSAOTex is an intermediate composition target.  Translucent
-            // terrain, especially water, has already been blended into it with
-            // SRC_ALPHA, so its RGB is effectively premultiplied by alpha.  Using
-            // SRC_ALPHA again during the final blit multiplies water by alpha a
-            // second time, which makes Voxy water appear almost black when Iris
-            // shaders are not active.
-            glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+            glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
             AbstractRenderPipeline.transformBlitDepth(this.finalBlit, this.fb.getDepthTex().id, sourceFrameBuffer, viewport, new Matrix4f(viewport.vanillaProjection).mul(viewport.modelView));
             glDisable(GL_BLEND);
         } else {
