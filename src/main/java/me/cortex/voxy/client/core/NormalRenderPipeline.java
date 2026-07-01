@@ -35,6 +35,10 @@ import static org.lwjgl.opengl.GL30C.*;
 import static org.lwjgl.opengl.GL43.GL_DEPTH_STENCIL_TEXTURE_MODE;
 import static org.lwjgl.opengl.GL45C.glBindTextureUnit;
 import static org.lwjgl.opengl.GL45C.glTextureParameterf;
+import static org.lwjgl.opengl.GL42C.GL_FRAMEBUFFER_BARRIER_BIT;
+import static org.lwjgl.opengl.GL42C.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT;
+import static org.lwjgl.opengl.GL42C.GL_TEXTURE_FETCH_BARRIER_BIT;
+import static org.lwjgl.opengl.GL42C.glMemoryBarrier;
 
 public class NormalRenderPipeline extends AbstractRenderPipeline {
     private GlTexture colourTex;
@@ -88,6 +92,12 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
     protected void postOpaquePreTranslucent(Viewport<?> viewport, int sourceFrameBuffer) {
         GPUTiming.INSTANCE.marker("ao");
         this.ssao.computeSSAO(viewport, this.colourSSAOTex, this.colourTex, this.fb.getDepthTex(), sourceFrameBuffer);
+
+        // colourSSAOTex is written by a compute shader and is used immediately
+        // afterwards as the framebuffer colour attachment for translucent LOD
+        // water. Some drivers otherwise blend water against stale/undefined
+        // black texels when no shader pipeline owns the render targets.
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_FRAMEBUFFER_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
         glBindFramebuffer(GL_FRAMEBUFFER, this.fbSSAO.id);
     }
 
@@ -124,7 +134,12 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
         //Unbelievably jank hack, only blit out to the framebuffer if we are rendering fog
         if (!fogCoversAllRendering) {
             glEnable(GL_BLEND);
-            glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+            // colourSSAOTex is an intermediate composited target. Translucent LOD
+            // water has already been alpha-blended into that target, so its RGB is
+            // effectively premultiplied by alpha when no opaque LOD pixel is behind
+            // it. Using SRC_ALPHA here multiplies it a second time and makes water
+            // look dark/black in the normal no-shader pipeline.
+            glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
             AbstractRenderPipeline.transformBlitDepth(this.finalBlit, this.fb.getDepthTex().id, sourceFrameBuffer, viewport, new Matrix4f(viewport.vanillaProjection).mul(viewport.modelView));
             glDisable(GL_BLEND);
         } else {

@@ -185,12 +185,12 @@ public class SoftwareModelTextureBakery {
 
             @Override
             public float getShade(Direction direction, boolean bl) {
-                // Match upstream Fabric Voxy's software fluid bake: the temporary
-                // world reports zero shade and the fluid vertex colour is ignored
-                // by ReuseVertexConsumer during renderLiquid().  The baked texture
-                // then keeps the atlas water alpha instead of storing a darkened or
-                // over-opaque vertex-coloured result.
-                return 0;
+                // NeoForge's liquid renderer still asks the world for directional
+                // shade while building fluid vertices.  Return vanilla-like shade so
+                // the renderer never receives a zero-light temporary world; the
+                // ReuseVertexConsumer below ignores the RGB vertex colour for fluids
+                // so the baked atlas keeps the water sprite's own colour/alpha.
+                return getVanillaLikeFluidShade(direction);
             }
         
         };
@@ -215,6 +215,18 @@ public class SoftwareModelTextureBakery {
         }
     }
 
+
+    private static float getVanillaLikeFluidShade(Direction direction) {
+        if (direction == null) {
+            return 1.0f;
+        }
+        return switch (direction) {
+            case DOWN -> 0.5f;
+            case UP -> 1.0f;
+            case NORTH, SOUTH -> 0.8f;
+            case WEST, EAST -> 0.6f;
+        };
+    }
 
     private static boolean shouldReturnAirForFluid(BlockPos pos, int face) {
         var fv = Direction.from3DDataValue(face).getNormal();
