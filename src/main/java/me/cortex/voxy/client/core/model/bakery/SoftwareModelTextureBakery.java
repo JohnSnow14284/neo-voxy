@@ -15,6 +15,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.BlockAndTintGetter;
 import net.minecraft.world.level.ColorResolver;
 import net.minecraft.world.level.LightLayer;
@@ -51,12 +52,15 @@ import static org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER;
 import static org.lwjgl.opengl.GL30C.glBindFramebuffer;
 
 public class SoftwareModelTextureBakery {
-    // Note: the first bit of metadata is if alpha discard is enabled
+
     private static final Matrix4f[] VIEWS = new Matrix4f[6];
 
     private final ReuseVertexConsumer opaqueVC = new ReuseVertexConsumer();
     private final ReuseVertexConsumer translucentVC = new ReuseVertexConsumer(1/*has discard*/);
     private final SoftwareRasterizer rasterizer = new SoftwareRasterizer(ModelFactory.MODEL_TEXTURE_SIZE);
+
+   
+    private static final int VANILLA_WATER_LOD_MIN_ALPHA = 144;
 
 
     public SoftwareModelTextureBakery() {
@@ -185,11 +189,7 @@ public class SoftwareModelTextureBakery {
 
             @Override
             public float getShade(Direction direction, boolean bl) {
-                // renderLiquid() multiplies the fluid vertex colour by getShade().
-                // Returning 0 here bakes vanilla water/lava as pure black in Voxy's
-                // normal, non-Iris pipeline.  Lumisene uses already-coloured sprites,
-                // so keep it unshaded; use vanilla-like directional shade constants
-                // for ordinary fluids to preserve depth without blackening them.
+               
                 if (ModelFactory.isLumiseneFluidBlockState(state)) {
                     return 1.0f;
                 }
@@ -328,11 +328,37 @@ public class SoftwareModelTextureBakery {
                 this.rasterizer.raster(VIEWS[i], this.opaqueVC);
                 this.rasterizer.setBlending(true);
                 this.rasterizer.raster(VIEWS[i], this.translucentVC);
+                postProcessFluidLodColour(state, this.rasterizer.getRawFramebuffer());
                 UnsafeUtil.memcpy(this.rasterizer.getRawFramebuffer(), outputBuffer + (SINGLE_FACE_OUTPUT_SIZE * i));
             }
         }
 
         return (isAnyShaded ? 1 : 0) | (isAnyDarkend ? 2 : 0) | (anyTranslucent ? 4 : 0) | (anyDiscard ? 8 : 0);
+    }
+
+    private static void postProcessFluidLodColour(BlockState state, long[] framebuffer) {
+        if (!shouldClampWaterLodAlpha(state)) {
+            return;
+        }
+
+        for (int i = 0; i < framebuffer.length; i++) {
+            long packed = framebuffer[i];
+            int colour = (int) packed;
+            int alpha = colour >>> 24;
+            if (alpha == 0 || alpha >= VANILLA_WATER_LOD_MIN_ALPHA) {
+                continue;
+            }
+
+            colour = (colour & 0x00FFFFFF) | (VANILLA_WATER_LOD_MIN_ALPHA << 24);
+            framebuffer[i] = (packed & 0xFFFFFFFF00000000L) | Integer.toUnsignedLong(colour);
+        }
+    }
+
+    private static boolean shouldClampWaterLodAlpha(BlockState state) {
+        FluidState fluidState = state.getFluidState();
+        return !fluidState.isEmpty()
+                && fluidState.is(FluidTags.WATER)
+                && !ModelFactory.isLumiseneFluidBlockState(state);
     }
 
     static {
