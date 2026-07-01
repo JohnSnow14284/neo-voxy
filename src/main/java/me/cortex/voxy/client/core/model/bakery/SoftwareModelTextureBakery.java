@@ -185,11 +185,15 @@ public class SoftwareModelTextureBakery {
 
             @Override
             public float getShade(Direction direction, boolean bl) {
-                // Supplementaries' Lumisene already uses coloured sprites.  The normal
-                // offline fluid bake multiplies the sampled sprite by this shade value;
-                // returning 0 makes the baked LOD texture pure black.  Keep the fix
-                // narrow so vanilla water/lava and other fluids retain the old path.
-                return ModelFactory.isLumiseneFluidBlockState(state) ? 1.0f : 0.0f;
+                // renderLiquid() multiplies the fluid vertex colour by getShade().
+                // Returning 0 here bakes vanilla water/lava as pure black in Voxy's
+                // normal, non-Iris pipeline.  Lumisene uses already-coloured sprites,
+                // so keep it unshaded; use vanilla-like directional shade constants
+                // for ordinary fluids to preserve depth without blackening them.
+                if (ModelFactory.isLumiseneFluidBlockState(state)) {
+                    return 1.0f;
+                }
+                return getVanillaLikeFluidShade(direction);
             }
         
         };
@@ -205,6 +209,19 @@ public class SoftwareModelTextureBakery {
         Minecraft.getInstance().getBlockRenderer().renderLiquid(BlockPos.ZERO, getter, vc, state, state.getFluidState());
         this.translucentVC.setDefaultMeta(0);//Reset default meta
         this.opaqueVC.setDefaultMeta(0);//Reset default meta
+    }
+
+
+    private static float getVanillaLikeFluidShade(Direction direction) {
+        if (direction == null) {
+            return 1.0f;
+        }
+        return switch (direction) {
+            case DOWN -> 0.5f;
+            case UP -> 1.0f;
+            case NORTH, SOUTH -> 0.8f;
+            case WEST, EAST -> 0.6f;
+        };
     }
 
     private static boolean shouldReturnAirForFluid(BlockPos pos, int face) {
