@@ -32,6 +32,11 @@ public class MixinSodiumWorldRendererVS {
     
     @Unique
     private void doRender(ChunkRenderMatrices matrices, RenderType renderLayer, double x, double y, double z) {
+        // Avoid all Voxy-side work during Iris shadow rendering. The normal Sodium terrain
+        // path remains untouched, so shadows still receive nearby chunk geometry.
+        if (IrisUtil.irisShadowActive()) {
+            return;
+        }
         if (renderLayer == RenderType.solid()) {
             var renderer = ((IGetVoxyRenderSystem) Minecraft.getInstance().levelRenderer).voxy$getRenderSystem();
             if (renderer != null) {

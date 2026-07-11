@@ -15,8 +15,6 @@ import me.cortex.voxy.client.core.rendering.util.UploadStream;
 import me.cortex.voxy.common.Logger;
 import net.minecraft.client.Minecraft;
 import org.joml.Matrix4f;
-import org.joml.Vector3f;
-import org.joml.Vector3i;
 import org.lwjgl.system.MemoryUtil;
 
 import static org.lwjgl.opengl.ARBDirectStateAccess.glCopyNamedBufferSubData;
@@ -39,6 +37,9 @@ public class ChunkBoundRenderer {
     private long[] idx2chunk = new long[INIT_MAX_CHUNK_COUNT];
     private final Shader rasterShader;
     private final RenderProperties properties;
+    // Render-thread scratch matrix. Reusing it avoids one Matrix4f allocation for every
+    // frame in which the chunk-bound depth mask is drawn.
+    private final Matrix4f cameraRelativeMvp = new Matrix4f();
 
     private final LongOpenHashSet addQueue = new LongOpenHashSet();
     private final LongOpenHashSet remQueue = new LongOpenHashSet();
@@ -101,20 +102,27 @@ public class ChunkBoundRenderer {
 
         {//This is recomputed to be in chunk section space not worldsection
 
-            //Camera block pos
-            int bx = (int)(viewport.cameraX);
-            int by = (int)(viewport.cameraY);
-            int bz = (int)(viewport.cameraZ);
-            new Vector3i(bx, by, bz).getToAddress(ptr); ptr += 4*4;
+            // Camera block position. Write directly into the mapped UBO instead of creating
+            // short-lived Vector3i/Vector3f objects on every frame.
+            int bx = (int) viewport.cameraX;
+            int by = (int) viewport.cameraY;
+            int bz = (int) viewport.cameraZ;
+            MemoryUtil.memPutInt(ptr, bx); ptr += 4;
+            MemoryUtil.memPutInt(ptr, by); ptr += 4;
+            MemoryUtil.memPutInt(ptr, bz); ptr += 4;
+            MemoryUtil.memPutInt(ptr, 0);  ptr += 4;
 
-            var negInnerBlock = new Vector3f(
-                    (float) (viewport.cameraX - bx),
-                    (float) (viewport.cameraY - by),
-                    (float) (viewport.cameraZ - bz));
+            float innerX = (float) (viewport.cameraX - bx);
+            float innerY = (float) (viewport.cameraY - by);
+            float innerZ = (float) (viewport.cameraZ - bz);
+            MemoryUtil.memPutFloat(ptr, innerX); ptr += 4;
+            MemoryUtil.memPutFloat(ptr, innerY); ptr += 4;
+            MemoryUtil.memPutFloat(ptr, innerZ); ptr += 4;
 
-
-            negInnerBlock.getToAddress(ptr); ptr += 4*3;
-            viewport.MVP.translate(negInnerBlock.negate(), new Matrix4f()).getToAddress(matPtr);
+            this.cameraRelativeMvp
+                    .set(viewport.MVP)
+                    .translate(-innerX, -innerY, -innerZ)
+                    .getToAddress(matPtr);
             MemoryUtil.memPutFloat(ptr, renderDistance); ptr += 4;
         }
         UploadStream.INSTANCE.commit();

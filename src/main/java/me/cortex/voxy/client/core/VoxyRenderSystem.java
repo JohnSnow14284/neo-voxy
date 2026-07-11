@@ -259,6 +259,13 @@ public class VoxyRenderSystem {
             return;//Only render on valid viewport
         }
 
+        // Sodium, Iris and other render hooks may leave depth state configured for a
+        // previous pass. Re-establish Voxy's expected state before any LOD work so the
+        // renderer does not inherit disabled depth writes or the wrong comparison mode.
+        GlStateManager._enableDepthTest();
+        GlStateManager._depthFunc(this.properties.closerEqualDepthCompare());
+        GlStateManager._depthMask(true);
+
         TimingStatistics.resetSamplers();
 
         TimingStatistics.all.start();

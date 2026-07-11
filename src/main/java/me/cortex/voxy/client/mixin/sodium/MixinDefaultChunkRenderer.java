@@ -30,7 +30,9 @@ public abstract class MixinDefaultChunkRenderer extends ShaderChunkRenderer {
 
     @Inject(method = "render", at = @At(value = "HEAD"), cancellable = true)
     private void cancelThingie(ChunkRenderMatrices matrices, CommandList commandList, ChunkRenderListIterable renderLists, TerrainRenderPass renderPass, CameraTransform camera, boolean indexedRenderingEnabled, CallbackInfo ci) {
-        if (VoxyClient.disableSodiumChunkRender()) {
+        // Voxy never replaces Sodium's shadow terrain. Cancelling here would remove
+        // chunks from the Iris shadow map when the optional Sodium-disable path is active.
+        if (VoxyClient.disableSodiumChunkRender() && !IrisUtil.irisShadowActive()) {
             super.begin(renderPass);
             this.doRender(matrices, renderPass, camera);
             super.end(renderPass);
@@ -45,6 +47,12 @@ public abstract class MixinDefaultChunkRenderer extends ShaderChunkRenderer {
 
     @Unique
     private void doRender(ChunkRenderMatrices matrices, TerrainRenderPass renderPass, CameraTransform camera) {
+        // This branch uses an older Sodium API without VisibleChunkCollector. Stop at the
+        // render hook itself, before renderer lookup and viewport setup, which provides the
+        // same shadow-pass saving without depending on newer Sodium internals.
+        if (IrisUtil.irisShadowActive()) {
+            return;
+        }
         if (renderPass == DefaultTerrainRenderPasses.CUTOUT) {
             var renderer = ((IGetVoxyRenderSystem) Minecraft.getInstance().levelRenderer).voxy$getRenderSystem();
             if (renderer != null) {
