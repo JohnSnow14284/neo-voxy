@@ -219,6 +219,14 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
         super.addDebug(debug);
     }
 
+    @Override
+    public int getDetachedSceneDepthTexture() {
+        if (this.data.renderToVanillaDepth || this.fbTranslucent.getDepthTex() == null) {
+            return 0;
+        }
+        return this.fbTranslucent.getDepthTex().id;
+    }
+
     private static final int UNIFORM_BINDING_POINT = 7;//TODO make ths binding point... not randomly 5
 
     private StringBuilder buildGenericShaderHeader(AbstractSectionRenderer<?, ?> renderer, String input) {

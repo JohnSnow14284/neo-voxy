@@ -6,6 +6,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 
 import me.cortex.voxy.client.TimingStatistics;
 import me.cortex.voxy.client.VoxyClient;
+import me.cortex.voxy.client.compat.sable.SableDepthBridge;
 import me.cortex.voxy.client.config.VoxyConfig;
 import me.cortex.voxy.client.core.gl.Capabilities;
 import me.cortex.voxy.client.core.gl.GlBuffer;
@@ -83,6 +84,7 @@ public class VoxyRenderSystem {
 
     private final AbstractRenderPipeline pipeline;
     private final RenderProperties properties;
+    private int detachedDepthFrame = Integer.MIN_VALUE;
 
     // Fog parameters captured before modification by MixinFogRenderer, for Voxy's own fog pass
     private float capturedFogStart;
@@ -311,6 +313,9 @@ public class VoxyRenderSystem {
         GPUTiming.INSTANCE.marker();
         //The entire rendering pipeline (excluding the chunkbound thing)
         this.pipeline.runPipeline(viewport, boundFB, dims[2], dims[3]);
+        // Mark the detached depth as current only after the complete LOD pipeline has
+        // finished. This prevents Sable's earlier SOLID pass from sampling last frame's depth.
+        this.detachedDepthFrame = viewport.frameId;
         GPUTiming.INSTANCE.marker();
 
 
@@ -536,6 +541,19 @@ public class VoxyRenderSystem {
         return this.viewportSelector.getViewport();
     }
 
+    public int getDetachedSceneDepthTexture() {
+        return this.pipeline.getDetachedSceneDepthTexture();
+    }
+
+    public boolean isDetachedSceneDepthCurrent(Viewport<?> viewport) {
+        return viewport != null && VoxyClient.getOcclusionDebugState() == 0
+                && this.detachedDepthFrame == viewport.frameId;
+    }
+
+    public RenderProperties getRenderProperties() {
+        return this.properties;
+    }
+
     public void addDebugInfo(List<String> debug) {
         debug.add("Buf/Tex [#/Mb]: [" + GlBuffer.getCount() + "/" + (GlBuffer.getTotalSize()/1_000_000) + "],[" + GlTexture.getCount() + "/" + (GlTexture.getEstimatedTotalSize()/1_000_000)+"]");
         {
@@ -582,6 +600,7 @@ public class VoxyRenderSystem {
         } catch (Exception e) {Logger.error("Error shutting down renderer components", e);}
         Logger.info("Shutting down render pipeline");
         try {this.pipeline.free();} catch (Exception e){Logger.error("Error releasing render pipeline", e);}
+        SableDepthBridge.release();
 
 
 

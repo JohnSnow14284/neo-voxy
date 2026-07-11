@@ -13,6 +13,7 @@ public class ClientVoxyMixinPlugin implements IMixinConfigPlugin {
     private static boolean valkyrienSkiesInstalled;
     private static boolean nvidiumInstalled;
     private static boolean connectorInstalled = false;
+    private static boolean sableInstalled;
 
     private static boolean isLoadedEarly(String modId) {
         var list = LoadingModList.get();
@@ -24,6 +25,7 @@ public class ClientVoxyMixinPlugin implements IMixinConfigPlugin {
         valkyrienSkiesInstalled = isLoadedEarly("valkyrienskies");
         nvidiumInstalled = isLoadedEarly("nvidium");
         connectorInstalled = isLoadedEarly("connector");
+        sableInstalled = isLoadedEarly("sable");
     }
 
     @Override
@@ -35,6 +37,10 @@ public class ClientVoxyMixinPlugin implements IMixinConfigPlugin {
             mixins.add("sodium.MixinSodiumWorldRendererVS");
         } else {
             mixins.add("sodium.MixinDefaultChunkRenderer");
+        }
+
+        if (sableInstalled) {
+            mixins.add("sable.MixinSableDepthBridge");
         }
 
         return mixins;
