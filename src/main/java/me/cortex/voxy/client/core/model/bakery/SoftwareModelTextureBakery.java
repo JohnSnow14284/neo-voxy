@@ -54,6 +54,13 @@ public class SoftwareModelTextureBakery {
     // Note: the first bit of metadata is if alpha discard is enabled
     private static final Matrix4f[] VIEWS = new Matrix4f[6];
 
+    /**
+     * Geometry hint emitted only while a block model is baked. It tells the LOD model
+     * builder that the four side projections belong to two centred crossed cards, not
+     * to the outer walls of a cube.
+     */
+    public static final int FLAG_CENTERED_GROUND_CROSS = 1 << 4;
+
     private final ReuseVertexConsumer opaqueVC = new ReuseVertexConsumer();
     private final ReuseVertexConsumer translucentVC = new ReuseVertexConsumer(1/*has discard*/);
     private final SoftwareRasterizer rasterizer = new SoftwareRasterizer(ModelFactory.MODEL_TEXTURE_SIZE);
@@ -96,14 +103,26 @@ public class SoftwareModelTextureBakery {
         this.rasterizer.setSamplerTexture(pixels, width, height);
     }
 
-    private void bakeBlockModel(int blockId, BlockState state, RenderType layer) {
+    /**
+     * Bakes the model and, at the same time, cheaply identifies the common ground-plant
+     * shape made from two diagonal cards. The probe consumes the same quad lists already
+     * needed by the baker, so it adds no model lookups and runs only once per block state.
+     *
+     * <p>Axis-aligned cards are deliberately rejected (crops and wall vines), as are
+     * horizontal cards (lily pads) and models with direction-cull quads.</p>
+     */
+    private boolean bakeBlockModel(int blockId, BlockState state, RenderType layer) {
         if (state.getRenderShape() == RenderShape.INVISIBLE) {
-            return;// Dont bake if invisible
+            return false;// Dont bake if invisible
         }
         var model = Minecraft.getInstance()
                 .getModelManager()
                 .getBlockModelShaper()
                 .getBlockModel(state);
+
+        boolean crossCandidate = true;
+        int diagonalFamilies = 0;
+        int unculledQuadCount = 0;
 
         ModelData modelData = DomumOrnamentumCompat.getModelData(blockId, state);
         for (Direction direction : new Direction[] { Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH,
@@ -112,11 +131,95 @@ public class SoftwareModelTextureBakery {
             var quads = modelData == ModelData.EMPTY
                     ? model.getQuads(state, direction, random)
                     : model.getQuads(state, direction, random, modelData, layer);
+
+            if (direction != null && !quads.isEmpty()) {
+                crossCandidate = false;
+            }
+
             for (var quad : quads) {
+                if (direction == null && crossCandidate) {
+                    int family = classifyGroundCrossQuad(quad.getVertices());
+                    if (family == 0) {
+                        crossCandidate = false;
+                    } else {
+                        diagonalFamilies |= family;
+                        unculledQuadCount++;
+                    }
+                }
+
                 (layer == RenderType.translucent() ? this.translucentVC : this.opaqueVC)
                         .quad(quad, state.is(BlockTags.LEAVES), layer, state);
             }
         }
+
+        return crossCandidate && unculledQuadCount >= 2 && diagonalFamilies == 0b11;
+    }
+
+    /**
+     * Returns bit 0/1 for the two diagonal plane families, or zero when the quad is not
+     * a centred vertical diagonal card. Opposite winding produces the same family bit.
+     */
+    private static int classifyGroundCrossQuad(int[] vertices) {
+        if (vertices.length < 16 || (vertices.length & 3) != 0) {
+            return 0;
+        }
+
+        int stride = vertices.length / 4;
+        float x0 = Float.intBitsToFloat(vertices[0]);
+        float y0 = Float.intBitsToFloat(vertices[1]);
+        float z0 = Float.intBitsToFloat(vertices[2]);
+        float x1 = Float.intBitsToFloat(vertices[stride]);
+        float y1 = Float.intBitsToFloat(vertices[stride + 1]);
+        float z1 = Float.intBitsToFloat(vertices[stride + 2]);
+        float x2 = Float.intBitsToFloat(vertices[stride * 2]);
+        float y2 = Float.intBitsToFloat(vertices[stride * 2 + 1]);
+        float z2 = Float.intBitsToFloat(vertices[stride * 2 + 2]);
+        float x3 = Float.intBitsToFloat(vertices[stride * 3]);
+        float y3 = Float.intBitsToFloat(vertices[stride * 3 + 1]);
+        float z3 = Float.intBitsToFloat(vertices[stride * 3 + 2]);
+
+        float ax = x1 - x0;
+        float ay = y1 - y0;
+        float az = z1 - z0;
+        float bx = x2 - x0;
+        float by = y2 - y0;
+        float bz = z2 - z0;
+        float nx = ay * bz - az * by;
+        float ny = az * bx - ax * bz;
+        float nz = ax * by - ay * bx;
+        float normalLengthSq = nx * nx + ny * ny + nz * nz;
+        if (normalLengthSq < 1.0e-8f) {
+            return 0;
+        }
+
+        float normalLength = (float) Math.sqrt(normalLengthSq);
+        float absX = Math.abs(nx);
+        float absY = Math.abs(ny);
+        float absZ = Math.abs(nz);
+
+        // Lily pads and other horizontal cards have a mostly vertical normal.
+        if (absY > normalLength * 0.12f) {
+            return 0;
+        }
+
+        // Crops and vines use axis-aligned cards. Ground crosses have balanced X/Z normals.
+        float major = Math.max(absX, absZ);
+        float minor = Math.min(absX, absZ);
+        if (major < 1.0e-5f || minor < major * 0.55f) {
+            return 0;
+        }
+
+        // The plane must pass through the middle of the block cell. This rejects slanted
+        // decorative faces which merely happen to have a diagonal normal.
+        float centerX = (x0 + x1 + x2 + x3) * 0.25f - 0.5f;
+        float centerY = (y0 + y1 + y2 + y3) * 0.25f - 0.5f;
+        float centerZ = (z0 + z1 + z2 + z3) * 0.25f - 0.5f;
+        float planeDistance = Math.abs(nx * centerX + ny * centerY + nz * centerZ) / normalLength;
+        if (planeDistance > 0.0625f) {
+            return 0;
+        }
+
+        return nx * nz >= 0.0f ? 0b01 : 0b10;
     }
 
     private void bakeFluidState(BlockState state, int face, RenderType layer) {
@@ -278,10 +381,11 @@ public class SoftwareModelTextureBakery {
         boolean isAnyDarkend = false;
         boolean anyTranslucent = false;
         boolean anyDiscard = false;
+        boolean centeredGroundCross = false;
         if (isBlock) {
             this.opaqueVC.reset();
             this.translucentVC.reset();
-            this.bakeBlockModel(blockId, state, blockRenderLayer);
+            centeredGroundCross = this.bakeBlockModel(blockId, state, blockRenderLayer);
             isAnyShaded |= this.opaqueVC.anyShaded | this.translucentVC.anyShaded;
             isAnyDarkend |= this.opaqueVC.anyDarkendTex | this.translucentVC.anyDarkendTex;
             anyTranslucent |= !this.translucentVC.isEmpty();
@@ -336,7 +440,11 @@ public class SoftwareModelTextureBakery {
             }
         }
 
-        return (isAnyShaded ? 1 : 0) | (isAnyDarkend ? 2 : 0) | (anyTranslucent ? 4 : 0) | (anyDiscard ? 8 : 0);
+        return (isAnyShaded ? 1 : 0)
+                | (isAnyDarkend ? 2 : 0)
+                | (anyTranslucent ? 4 : 0)
+                | (anyDiscard ? 8 : 0)
+                | (centeredGroundCross ? FLAG_CENTERED_GROUND_CROSS : 0);
     }
 
 
