@@ -1,0 +1,15 @@
+# Project exclude paths
+/.gradle/
+/.idea/
+/build/
+/run/
+/out/
+/logs/
+
+bin/
+.classpath
+.project
+*.launch
+.settings/
+
+.vscode/
