@@ -47,7 +47,7 @@ public class VoxyNeoForgeConfig {
     private static final ModConfigSpec.DoubleValue SUB_DIVISION_SIZE = BUILDER
             .comment("Subdivision size for LOD rendering (28-256)",
                      "Lower = more detailed LODs but more GPU load")
-            .defineInRange("subDivisionSize", 28.0, 28.0, 256.0);
+            .defineInRange("subDivisionSize", 63.0, 28.0, 256.0);
 
     // Visual settings
     private static final ModConfigSpec.BooleanValue USE_ENVIRONMENTAL_FOG = BUILDER
@@ -86,8 +86,8 @@ public class VoxyNeoForgeConfig {
     private static final ModConfigSpec.IntValue REQUEST_DISTANCE = BUILDER
             .comment("FakeSight request distance in chunks",
                      "This is the chunk distance reported to the server/integrated server.",
-                     "Large values increase server/network/client load. Recommended: 32-64.")
-            .defineInRange("requestDistance", 48, 8, 127);
+                     "Large values increase server/network/client load. Maximum: 48.")
+            .defineInRange("requestDistance", 48, VoxyConfig.MIN_REQUEST_DISTANCE, VoxyConfig.MAX_REQUEST_DISTANCE);
 
     // Debug settings
     private static final ModConfigSpec.BooleanValue RENDER_STATISTICS = BUILDER
@@ -126,6 +126,7 @@ public class VoxyNeoForgeConfig {
         VoxyConfig.CONFIG.earthCurveRatio = EARTH_CURVE_RATIO.get();
         VoxyConfig.CONFIG.enableExtendedRequestDistance = ENABLE_EXTENDED_REQUEST_DISTANCE.get();
         VoxyConfig.CONFIG.requestDistance = REQUEST_DISTANCE.get();
+        VoxyConfig.CONFIG.sanitize();
 
         // RenderStatistics is a runtime-only setting (not saved to JSON)
         RenderStatistics.enabled = RENDER_STATISTICS.get();
@@ -143,6 +144,7 @@ public class VoxyNeoForgeConfig {
      * appear to reset after restarting the game.
      */
     private static void syncFromVoxyConfig() {
+        VoxyConfig.CONFIG.sanitize();
         ENABLED.set(VoxyConfig.CONFIG.enabled);
         ENABLE_RENDERING.set(VoxyConfig.CONFIG.enableRendering);
         INGEST_ENABLED.set(VoxyConfig.CONFIG.ingestEnabled);

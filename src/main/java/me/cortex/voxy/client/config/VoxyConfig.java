@@ -17,6 +17,12 @@ import java.nio.file.Path;
 import java.util.Locale;
 
 public class VoxyConfig {
+    public static final int MIN_REQUEST_DISTANCE = 8;
+    public static final int MAX_REQUEST_DISTANCE = 48;
+    public static final int MAX_CLOUD_DISTANCE = 128;
+    public static final float MIN_SUBDIVISION_SIZE = 28.0f;
+    public static final float MAX_SUBDIVISION_SIZE = 256.0f;
+
     private static final Gson GSON = new GsonBuilder()
             .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
             .setPrettyPrinting()
@@ -30,7 +36,7 @@ public class VoxyConfig {
     public boolean ingestEnabled = true;
     public float sectionRenderDistance = 16;
     public int serviceThreads = (int) Math.max(CpuLayout.getCoreCount()/1.5, 1);
-    public float subDivisionSize = 28;
+    public float subDivisionSize = 63;
     public int skyFogDistance = 96;
     public float fogIntensity = 1.0f;
     public float fogDensity = 0.0f;
@@ -55,6 +61,10 @@ public class VoxyConfig {
     public String ssaoMode;
 
     public boolean useEnvironmentalFog = true;
+
+    public int getRequestDistance() {
+        return Math.clamp(this.requestDistance, MIN_REQUEST_DISTANCE, MAX_REQUEST_DISTANCE);
+    }
 
     public int getRenderPressureLevel() {
         if (this.renderPressure < 0 || this.renderPressure > 4) {
@@ -81,6 +91,7 @@ public class VoxyConfig {
                 try (FileReader reader = new FileReader(path.toFile())) {
                     var conf = GSON.fromJson(reader, VoxyConfig.class);
                     if (conf != null) {
+                        conf.sanitize();
                         conf.save();
                         return conf;
                     } else {
@@ -102,12 +113,22 @@ public class VoxyConfig {
         }
     }
 
+    public void sanitize() {
+        this.subDivisionSize = Math.clamp(this.subDivisionSize, MIN_SUBDIVISION_SIZE, MAX_SUBDIVISION_SIZE);
+        this.requestDistance = Math.clamp(this.requestDistance, MIN_REQUEST_DISTANCE, MAX_REQUEST_DISTANCE);
+        this.skyFogDistance = Math.clamp(this.skyFogDistance, 0, 1024);
+        this.cloudDistance = Math.clamp(this.cloudDistance, 0, MAX_CLOUD_DISTANCE);
+        this.fogIntensity = Math.clamp(this.fogIntensity, 0.0f, 1.0f);
+        this.fogDensity = Math.clamp(this.fogDensity, 0.0f, 1.0f);
+    }
+
     public void save() {
         if (!VoxyCommon.isAvailable()) {
             Logger.info("Not saving config since voxy is unavalible");
             return;
         }
 
+        this.sanitize();
         try {
             Files.writeString(getConfigPath(), GSON.toJson(this));
         } catch (IOException e) {

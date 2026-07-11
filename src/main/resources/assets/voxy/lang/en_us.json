@@ -34,16 +34,16 @@
   "voxy.config.general.adaptCloudDistance": "Adaptive cloud distance",
   "voxy.config.general.adaptCloudDistance.tooltip": "Enables or disables adaptive cloud distance",
   "voxy.config.general.cloudDistance": "Cloud distance",
-  "voxy.config.general.cloudDistance.tooltip": "Cloud distance in chunks (Only used if adaptive cloud distance is disabled)",
+  "voxy.config.general.cloudDistance.tooltip": "Cloud distance in chunks, up to 128 (used when adaptive cloud distance is disabled)",
   "voxy.config.general.fogIntensity": "Fog intensity",
   "voxy.config.general.fogIntensity.tooltip": "Intensity of the fog, higher values make the fog thicker and reduce visibility",
   "voxy.config.general.fogDensity": "Fog density",
   "voxy.config.general.fogDensity.tooltip": "Density of the fog, higher values make the fog thicker",
   "voxy.config.general.skyFogDistance": "Sky fog distance",
-  "voxy.config.general.skyFogDistance.tooltip": "Distance at which sky fog starts to render in chunks",
+  "voxy.config.general.skyFogDistance.tooltip": "Sky fog range in chunks",
   "voxy.config.fakesight": "Extended Chunk Request",
   "voxy.config.fakesight.enabled": "Enable extended chunk request",
   "voxy.config.fakesight.enabled.tooltip": "FakeSight-style support: reports a larger view/request distance so the server sends more chunks for Voxy LOD ingestion.",
   "voxy.config.fakesight.distance": "Request distance",
-  "voxy.config.fakesight.distance.tooltip": "Chunk distance reported to the server or integrated server. Higher values load more chunks and increase CPU, memory and network load."
+  "voxy.config.fakesight.distance.tooltip": "Chunk distance reported to the server or integrated server. Maximum: 48. Higher values increase CPU, memory and network load."
 }

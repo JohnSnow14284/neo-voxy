@@ -19,7 +19,7 @@ public abstract class MixinIntegratedServer {
     )
     private int voxy$modifyIntegratedServerRenderDistance(int originalDistance) {
         if (VoxyConfig.CONFIG.enableExtendedRequestDistance && VoxyConfig.CONFIG.isRenderingEnabled()) {
-            return VoxyConfig.CONFIG.requestDistance;
+            return VoxyConfig.CONFIG.getRequestDistance();
         }
         return originalDistance;
     }

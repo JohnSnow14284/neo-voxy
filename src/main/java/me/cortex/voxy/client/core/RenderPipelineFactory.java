@@ -7,7 +7,6 @@ import me.cortex.voxy.client.core.util.IrisUtil;
 import me.cortex.voxy.client.iris.IGetIrisVoxyPipelineData;
 import me.cortex.voxy.common.Logger;
 import net.irisshaders.iris.Iris;
-import net.irisshaders.iris.api.v0.IrisApi;
 
 import java.util.function.BooleanSupplier;
 
@@ -15,7 +14,7 @@ public class RenderPipelineFactory {
     public static AbstractRenderPipeline createPipeline(RenderProperties properties, AsyncNodeManager nodeManager, NodeCleaner nodeCleaner, HierarchicalOcclusionTraverser traversal, BooleanSupplier frexSupplier) {
         //Note this is where will choose/create e.g. IrisRenderPipeline or normal pipeline
         AbstractRenderPipeline pipeline = null;
-        if (IrisUtil.IRIS_INSTALLED && IrisUtil.SHADER_SUPPORT) {
+        if (IrisUtil.SHADER_SUPPORT && IrisUtil.irisShaderPackEnabled()) {
             pipeline = createIrisPipeline(properties, nodeManager, nodeCleaner, traversal, frexSupplier);
         }
         if (pipeline == null) {

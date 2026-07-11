@@ -44,16 +44,14 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
     private GlTexture colourSSAOTex;
     private final GlFramebuffer fbSSAO = new GlFramebuffer();
 
-    private final boolean useEnvFog;
     private final FullscreenBlit finalBlit;
 
     private final SSAO ssao;
 
     protected NormalRenderPipeline(RenderProperties properties, AsyncNodeManager nodeManager, NodeCleaner nodeCleaner, HierarchicalOcclusionTraverser traversal, BooleanSupplier frexSupplier) {
         super(properties, nodeManager, nodeCleaner, traversal, frexSupplier, false);
-        this.useEnvFog = VoxyConfig.CONFIG.useEnvironmentalFog;
         this.finalBlit = new FullscreenBlit(properties, "voxy:post/blit_texture_depth_cutout.frag",
-                a -> a.defineIf("USE_ENV_FOG", this.useEnvFog)
+                a -> a.define("USE_ENV_FOG")
                         .define("EMIT_COLOUR")
                         .define("PREMULTIPLIED_COLOUR"));
 
@@ -108,22 +106,23 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
         float[] fogColor = vrs != null ? vrs.getCapturedFogColor() : RenderSystem.getShaderFogColor();
 
         float renderDistance = Minecraft.getInstance().gameRenderer.getRenderDistance();
-        boolean fogCoversAllRendering = fogEnd < renderDistance;
+        boolean useFog = VoxyConfig.CONFIG.useEnvironmentalFog
+                && VoxyConfig.CONFIG.fogIntensity > 0.0f
+                && Math.abs(fogEnd - fogStart) > 1.0f;
+        boolean fogCoversAllRendering = useFog && fogEnd < renderDistance;
 
-        if (this.useEnvFog) {
-            if (Math.abs(fogEnd - fogStart) > 1) {
-                glUniform2f(4, fogStart, fogEnd);
-                glUniform4f(5, fogColor[0], fogColor[1], fogColor[2], 1.0f);
-                glUniform1i(6, RenderSystem.getShaderFogShape().getIndex());
-                glUniform1f(7, VoxyConfig.CONFIG.fogIntensity);
-                glUniform1f(8, VoxyConfig.CONFIG.fogDensity);
-            } else {
-                glUniform2f(4, 0, 0);
-                glUniform4f(5, 0, 0, 0, 0);
-                glUniform1i(6, 0);
-                glUniform1f(7, 0);
-                glUniform1f(8, 0);
-            }
+        if (useFog) {
+            glUniform2f(4, fogStart, fogEnd);
+            glUniform4f(5, fogColor[0], fogColor[1], fogColor[2], 1.0f);
+            glUniform1i(6, RenderSystem.getShaderFogShape().getIndex());
+            glUniform1f(7, Math.clamp(VoxyConfig.CONFIG.fogIntensity, 0.0f, 1.0f));
+            glUniform1f(8, Math.clamp(VoxyConfig.CONFIG.fogDensity, 0.0f, 1.0f));
+        } else {
+            glUniform2f(4, 0, 0);
+            glUniform4f(5, 0, 0, 0, 0);
+            glUniform1i(6, 0);
+            glUniform1f(7, 0);
+            glUniform1f(8, 0);
         }
 
         glBindTextureUnit(3, this.colourSSAOTex.id);
