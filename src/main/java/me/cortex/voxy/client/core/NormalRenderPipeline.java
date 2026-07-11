@@ -23,7 +23,6 @@ import static org.lwjgl.opengl.GL11C.GL_NEAREST;
 import static org.lwjgl.opengl.GL11C.GL_ONE;
 import static org.lwjgl.opengl.GL11C.GL_ONE_MINUS_SRC_ALPHA;
 import static org.lwjgl.opengl.GL11C.GL_RGBA8;
-import static org.lwjgl.opengl.GL11C.GL_SRC_ALPHA;
 import static org.lwjgl.opengl.GL11C.GL_STENCIL_TEST;
 import static org.lwjgl.opengl.GL11C.GL_TEXTURE_MAG_FILTER;
 import static org.lwjgl.opengl.GL11C.GL_TEXTURE_MIN_FILTER;
@@ -54,7 +53,9 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
         super(properties, nodeManager, nodeCleaner, traversal, frexSupplier, false);
         this.useEnvFog = VoxyConfig.CONFIG.useEnvironmentalFog;
         this.finalBlit = new FullscreenBlit(properties, "voxy:post/blit_texture_depth_cutout.frag",
-                a->a.defineIf("USE_ENV_FOG", this.useEnvFog).define("EMIT_COLOUR"));
+                a -> a.defineIf("USE_ENV_FOG", this.useEnvFog)
+                        .define("EMIT_COLOUR")
+                        .define("PREMULTIPLIED_COLOUR"));
 
 
         this.ssao = SSAO.createSSAO(properties, VoxyConfig.CONFIG.getSSAOMode());
@@ -93,10 +94,7 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
         GPUTiming.INSTANCE.marker("ao");
         this.ssao.computeSSAO(viewport, this.colourSSAOTex, this.colourTex, this.fb.getDepthTex(), sourceFrameBuffer);
 
-        // colourSSAOTex is written by a compute shader and is used immediately
-        // afterwards as the framebuffer colour attachment for translucent LOD
-        // water. Some drivers otherwise blend water against stale/undefined
-        // black texels when no shader pipeline owns the render targets.
+        // Publish the compute result before translucent terrain uses it as a render target.
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_FRAMEBUFFER_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
         glBindFramebuffer(GL_FRAMEBUFFER, this.fbSSAO.id);
     }
@@ -134,11 +132,7 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
         //Unbelievably jank hack, only blit out to the framebuffer if we are rendering fog
         if (!fogCoversAllRendering) {
             glEnable(GL_BLEND);
-            // colourSSAOTex is an intermediate composited target. Translucent LOD
-            // water has already been alpha-blended into that target, so its RGB is
-            // effectively premultiplied by alpha when no opaque LOD pixel is behind
-            // it. Using SRC_ALPHA here multiplies it a second time and makes water
-            // look dark/black in the normal no-shader pipeline.
+            // Translucent LOD colour is already premultiplied in the intermediate target.
             glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
             AbstractRenderPipeline.transformBlitDepth(this.finalBlit, this.fb.getDepthTex().id, sourceFrameBuffer, viewport, new Matrix4f(viewport.vanillaProjection).mul(viewport.modelView));
             glDisable(GL_BLEND);

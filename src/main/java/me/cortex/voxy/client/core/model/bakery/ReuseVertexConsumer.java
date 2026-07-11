@@ -23,7 +23,7 @@ public final class ReuseVertexConsumer implements VertexConsumer {
     private long ptr;
     private int count;
     private int defaultMeta;
-    private boolean ignoreVertexColor;
+    private boolean vertexAlphaOnly;
 
     public boolean anyShaded;
     public boolean anyDarkendTex;
@@ -47,8 +47,8 @@ public final class ReuseVertexConsumer implements VertexConsumer {
         return this.defaultMeta;
     }
 
-    public ReuseVertexConsumer setIgnoreVertexColor(boolean ignoreVertexColor) {
-        this.ignoreVertexColor = ignoreVertexColor;
+    public ReuseVertexConsumer setVertexAlphaOnly(boolean vertexAlphaOnly) {
+        this.vertexAlphaOnly = vertexAlphaOnly;
         return this;
     }
 
@@ -77,9 +77,11 @@ public final class ReuseVertexConsumer implements VertexConsumer {
 
     @Override
     public ReuseVertexConsumer setColor(int i) {
-        if (!this.ignoreVertexColor) {
-            MemoryUtil.memPutInt(this.ptr + 24, normalizeAbgr(i));
+        int colour = normalizeAbgr(i);
+        if (this.vertexAlphaOnly) {
+            colour = (colour & 0xFF000000) | 0x00FFFFFF;
         }
+        MemoryUtil.memPutInt(this.ptr + 24, colour);
         return this;
     }
 
@@ -383,7 +385,7 @@ public final class ReuseVertexConsumer implements VertexConsumer {
         this.anyDarkendTex = false;
         this.anyDiscard = false;
         this.defaultMeta = 0;//RESET THE DEFAULT META
-        this.ignoreVertexColor = false;
+        this.vertexAlphaOnly = false;
         this.count = 0;
         this.ptr = this.buffer.address - VERTEX_FORMAT_SIZE;//the thing is first time this gets incremented by FORMAT_STRIDE
         return this;

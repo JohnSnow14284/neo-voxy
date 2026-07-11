@@ -57,7 +57,13 @@ void main() {
         float dist = getFragDistance(fogShape, point.xyz);
         float fogLerp = smoothstep(fogParams.x, fogParams.y, dist);
         if (fogDensity > 0.0) fogLerp = (exp(fogDensity * fogLerp) - 1.0) / (exp(fogDensity) - 1.0);
-        colour.rgb = mix(colour.rgb, fogColor.rgb, clamp(fogLerp * fogIntensity, 0.0, 1.0));
+
+        float fogAmount = clamp(fogLerp * fogIntensity, 0.0, 1.0);
+        #ifdef PREMULTIPLIED_COLOUR
+        colour.rgb = mix(colour.rgb, fogColor.rgb * colour.a, fogAmount);
+        #else
+        colour.rgb = mix(colour.rgb, fogColor.rgb, fogAmount);
+        #endif
     }
     #endif
     #else

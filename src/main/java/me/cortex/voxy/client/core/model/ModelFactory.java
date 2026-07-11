@@ -254,38 +254,15 @@ public class ModelFactory {
 
         boolean hasDarkenedTextures = (flags&2)!=0;
         boolean isShaded = (flags&1)!=0;
-        RenderType layer = null;
-        if (layer==null && (flags&4)!=0) {
-            //we do an extra check here to be sure texture is translucent
-
-            //TODO: check this is right
-            boolean anyTranslucent = false;
-            for (var face : textureData) {
-                anyTranslucent|=TextureUtils.hasTranslucentPixel(face);
-                if (anyTranslucent) break;
-            }
-            if (anyTranslucent) {
-                layer = RenderType.translucent();
-            } else {
-                boolean solid = true;
-                for (var face : textureData) {
-                    solid&=TextureUtils.isSolidWhereDrawn(face);
-                    if (!solid) break;
-                }
-                if (solid) {
-                    layer = RenderType.solid();
-                } else {
-                    layer = RenderType.cutout();
-                }
-            }
-        }
-        if (layer==null && (flags&8)!=0) {
+        RenderType layer;
+        if ((flags & 4) != 0) {
+            layer = RenderType.translucent();
+        } else if ((flags & 8) != 0) {
             layer = RenderType.cutout();
-        }
-        if (bake.state.is(BlockTags.LEAVES)) {
+        } else {
             layer = RenderType.solid();
         }
-        if (layer == null) {
+        if (bake.state.is(BlockTags.LEAVES)) {
             layer = RenderType.solid();
         }
 

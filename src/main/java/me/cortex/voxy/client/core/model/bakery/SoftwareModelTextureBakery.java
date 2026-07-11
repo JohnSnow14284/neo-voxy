@@ -235,11 +235,10 @@ public class SoftwareModelTextureBakery {
             }
             @Override
             public int getBlockTint(BlockPos pos, ColorResolver colorResolver) {
-                //This is such a stupid and bad hack, we can inject tinting state here since this is called
-                // before the quad is added
-                //TODO: need to make a quad once tinting thing
-                translucentVC.setDefaultMeta(translucentVC.getDefaultMeta()|4);//Tinting
-                opaqueVC.setDefaultMeta(opaqueVC.getDefaultMeta()|4);//Tinting
+                translucentVC.setDefaultMeta(translucentVC.getDefaultMeta() | 4);
+                opaqueVC.setDefaultMeta(opaqueVC.getDefaultMeta() | 4);
+                translucentVC.setVertexAlphaOnly(true);
+                opaqueVC.setVertexAlphaOnly(true);
                 return -1;
             }
 
@@ -288,11 +287,6 @@ public class SoftwareModelTextureBakery {
 
             @Override
             public float getShade(Direction direction, boolean bl) {
-                // NeoForge's liquid renderer still asks the world for directional
-                // shade while building fluid vertices.  Return vanilla-like shade so
-                // the renderer never receives a zero-light temporary world; the
-                // ReuseVertexConsumer below ignores the RGB vertex colour for fluids
-                // so the baked atlas keeps the water sprite's own colour/alpha.
                 return getVanillaLikeFluidShade(direction);
             }
         
@@ -306,15 +300,13 @@ public class SoftwareModelTextureBakery {
         } else {
             this.opaqueVC.setDefaultMeta(this.opaqueVC.getDefaultMeta()&~1);//remove discard
         }
-        this.opaqueVC.setIgnoreVertexColor(true);
-        this.translucentVC.setIgnoreVertexColor(true);
         try {
             Minecraft.getInstance().getBlockRenderer().renderLiquid(BlockPos.ZERO, getter, vc, state, state.getFluidState());
         } finally {
-            this.opaqueVC.setIgnoreVertexColor(false);
-            this.translucentVC.setIgnoreVertexColor(false);
-            this.translucentVC.setDefaultMeta(0);//Reset default meta
-            this.opaqueVC.setDefaultMeta(0);//Reset default meta
+            this.opaqueVC.setVertexAlphaOnly(false);
+            this.translucentVC.setVertexAlphaOnly(false);
+            this.translucentVC.setDefaultMeta(0);
+            this.opaqueVC.setDefaultMeta(0);
         }
     }
 
