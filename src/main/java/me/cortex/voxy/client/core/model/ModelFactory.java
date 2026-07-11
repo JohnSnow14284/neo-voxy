@@ -268,7 +268,9 @@ public class ModelFactory {
         }
 
 
-        var bakeResult = this.processTextureBakeResult(bake.blockId, bake.state, textureData, isShaded, hasDarkenedTextures, layer);
+        boolean centeredGroundCross = (flags & SoftwareModelTextureBakery.FLAG_CENTERED_GROUND_CROSS) != 0;
+        var bakeResult = this.processTextureBakeResult(
+                bake.blockId, bake.state, textureData, isShaded, hasDarkenedTextures, layer, centeredGroundCross);
         if (bakeResult!=null) {
             this.uploadResults.add(bakeResult);
         }
@@ -363,7 +365,12 @@ public class ModelFactory {
         }
     }
 
-    private ModelBakeResultUpload processTextureBakeResult(int blockId, BlockState blockState, ColourDepthTextureData[] textureData, boolean isShaded, boolean darkenedTinting, RenderType layer) {
+    private ModelBakeResultUpload processTextureBakeResult(int blockId, BlockState blockState,
+                                                            ColourDepthTextureData[] textureData,
+                                                            boolean isShaded,
+                                                            boolean darkenedTinting,
+                                                            RenderType layer,
+                                                            boolean centeredGroundCross) {
         if (this.idMappings[blockId] != -1) {
             //This should be impossible to reach as it means that multiple bakes for the same blockId happened and where inflight at the same time!
             throw new IllegalStateException("Block id already added: " + blockId + " for state: " + blockState);
@@ -459,6 +466,14 @@ public class ModelFactory {
         // since that would help alot with perf of lots of vines, can be done by having one of the faces just not exist and the other be in no occlusion mode
 
         var depths = computeModelDepth(textureData, checkMode, layer!=RenderType.solid()?TextureUtils.DEPTH_MODE_MIN:TextureUtils.DEPTH_MODE_AVG);
+
+        if (centeredGroundCross) {
+            for (int face = 2; face < 6; face++) {
+                if (depths[face] > -0.1f) {
+                    depths[face] = 0.5f;
+                }
+            }
+        }
 
         //TODO: THIS, note this can be tested for in 2 ways, re render the model with quad culling disabled and see if the result
         // is the same, (if yes then needs double sided quads)
