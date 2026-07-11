@@ -27,10 +27,23 @@ public class SectionSavingService {
         var section = task.section;
         section.assertNotFree();
         try {
-            //Unmark it dirty here (if it wasnt or w/e) so that it doesnt pointlessly resave (in theory this should be safe to do)
+            // Clear dirty before releasing the queue claim. Writers that run during the
+            // actual save will set it again, guaranteeing a follow-up save on release.
             section.setNotDirty();
-            if (section.exchangeIsInSaveQueue(false)) {
-                task.engine.storage.saveSection(section);
+            if (!section.exchangeIsInSaveQueue(false)) {
+                // A queued task should exclusively own this transition. Keep the section
+                // dirty if that invariant was broken so a later release retries the save.
+                section.markDirty();
+                Logger.error("Voxy saver lost ownership of a queued section: " + WorldEngine.pprintPos(section.key));
+            } else {
+                try {
+                    task.engine.storage.saveSection(section);
+                } catch (Exception e) {
+                    // Saving failed after dirty was cleared. Restore it before releasing the
+                    // service reference, otherwise the failed write could be forgotten.
+                    section.markDirty();
+                    throw e;
+                }
             }
         } catch (Exception e) {
             Logger.error("Voxy saver had an exception while executing please check logs and report error", e);

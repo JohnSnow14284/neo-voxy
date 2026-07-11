@@ -205,63 +205,75 @@ public class ActiveSectionTracker {
     }
 
     void tryUnload(WorldSection section, int hints) {
-        if (this.engine != null) this.engine.lastActiveTime = System.currentTimeMillis();
-        if (section.shouldSave()&&this.engine!=null) {
-            if (section.tryAcquire()) {
-                if (section.shouldSave()) {//If we should try enqueue
-                    if (!this.engine.saveSection(section, true, true)) {
-                        //we didnt enqueue the section in the save queue so we must unload it manually
-                        section.release(false, hints);
-                    }
-                } else {
-                    section.release(false, hints);//Special release
-                }
-            }
+        final WorldEngine world = this.engine;
+        if (world != null) {
+            world.lastActiveTime = System.currentTimeMillis();
         }
 
-        if (section.getRefCount() != 0) {
-            return;
-        }
-        int index = this.getCacheArrayIndex(section.key);
-        final var cache = this.loadedSectionCache[index];
-        WorldSection sec = null;
-        final var lock = this.locks[index];
-        long stamp = lock.writeLock();
-        boolean shouldRetryExit = false;
-        {
-            VarHandle.loadLoadFence();
-            if (this.engine != null && section.shouldSave()) {//Last call for saving
-                if (section.tryAcquire()) {
-                    if (!this.engine.saveSection(section, true, true)) {//not allowed to block as we are in a lock
-                        //We didnt enqueue the save here, so we must unload
-                        // but unload in a recursive
-                        VarHandle.fullFence();
-                        shouldRetryExit |= section.getRefCount()!=1;//if we arnt the only ref
-                        VarHandle.fullFence();
-                        shouldRetryExit |= section.isDirty;//or if the section is now dirty, note this must go AFTER the ref check, since you can only mark live sections as dirty
-                        section.release(false, hints);//Special
-                    }
-
-
-                    //NOTE: think have since fixed this issue
-                    //In theory there can be a race condition here, where if this thread is paused
-                    // the save queue fully finishes, the state is dirty == false inSaveQueue == false
-                    // but the acquire count is at least 1
-                    //if another thread marks this chunk as dirty (it would have acquired it after the inital `section.getRefCount() != 0`
-                    // return check) and releases it, since the acquire count is still 1 (acquired here)
-                    // then it doesnt trigger a save attempt but the dirty flag is set
-                    //then this code continues and it causes badness cause its now in an invalid state
-                } else {
-                    throw new IllegalStateException("Section was dirty but is also unloaded, this is very bad");
+        // A release can race both a writer and the asynchronous saver. Re-evaluate the
+        // state in-place rather than recursively entering tryUnload from another release.
+        for (;;) {
+            if (world != null && section.shouldSave()) {
+                if (!section.tryAcquire()) {
+                    return;
                 }
+
+                // Recheck after acquiring a reference. A saver may have claimed the section
+                // between the first shouldSave() test and tryAcquire().
+                VarHandle.loadLoadFence();
+                if (!section.shouldSave()) {
+                    section.release(false, hints);
+                    continue;
+                }
+
+                // Outside the cache lock we may apply queue back-pressure and help drain it.
+                // A successful enqueue owns the reference acquired above.
+                if (world.saveSection(section, false, true)) {
+                    return;
+                }
+
+                // Another saver won the queue claim. Drop only our temporary reference and
+                // inspect the state again; the winning queue entry keeps the section alive.
+                section.release(false, hints);
+                continue;
             }
 
-            //This is a painful case, we need to abort here if there was a funky thing that happened
-            if (shouldRetryExit) {
-                lock.unlockWrite(stamp);
-                //retry
-                this.tryUnload(section, hints);
+            if (section.getRefCount() != 0) {
                 return;
+            }
+
+            int index = this.getCacheArrayIndex(section.key);
+            final var cache = this.loadedSectionCache[index];
+            final var lock = this.locks[index];
+            WorldSection removedSection = null;
+
+            long stamp = lock.writeLock();
+
+            // acquire() uses the same striped lock. This second check closes the window
+            // between the lock-free ref-count test above and obtaining the write lock.
+            if (section.getRefCount() != 0) {
+                lock.unlockWrite(stamp);
+                return;
+            }
+
+            VarHandle.loadLoadFence();
+            if (world != null && section.shouldSave()) {
+                if (!section.tryAcquire()) {
+                    lock.unlockWrite(stamp);
+                    continue;
+                }
+
+                // Never block or drain the save service while holding the section-cache lock.
+                if (world.saveSection(section, true, true)) {
+                    lock.unlockWrite(stamp);
+                    return;
+                }
+
+                // A competing queue claim appeared while the lock was held. Keep unloading
+                // out of this critical section and retry after releasing our temporary ref.
+                section.release(false, hints);
+                lock.unlockWrite(stamp);
+                continue;
             }
 
             if (section.getRefCount() == 0 && section.trySetFreed()) {
@@ -271,37 +283,36 @@ public class ActiveSectionTracker {
                     throw new IllegalStateException("This should be impossible: " + WorldEngine.pprintPos(section.key) + " secObj: " + System.identityHashCode(section));
                 }
                 if (obj != section) {
-                    throw new IllegalStateException("Removed section not the same as the referenced section in the cache: cached: " + obj + " got: " + section + " A: " + WorldSection.ATOMIC_STATE_HANDLE.get(obj) + " B: " +WorldSection.ATOMIC_STATE_HANDLE.get(section));
+                    throw new IllegalStateException("Removed section not the same as the referenced section in the cache: cached: " + obj + " got: " + section + " A: " + WorldSection.ATOMIC_STATE_HANDLE.get(obj) + " B: " + WorldSection.ATOMIC_STATE_HANDLE.get(section));
                 }
-                sec = section;
+                removedSection = section;
             }
-        }
 
-        WorldSection aa = null;
-        if (sec != null) {
-            long stamp2 = this.lruLock.writeLock();
-            lock.unlockWrite(stamp);
-            WorldSection a = this.lruSecondaryCache.put(section.key, section);
-            if (a != null) {
-                throw new IllegalStateException("duplicate sections in cache is impossible");
+            WorldSection evictedSection = null;
+            if (removedSection != null) {
+                long lruStamp = this.lruLock.writeLock();
+                lock.unlockWrite(stamp);
+
+                WorldSection duplicate = this.lruSecondaryCache.put(section.key, section);
+                if (duplicate != null) {
+                    this.lruLock.unlockWrite(lruStamp);
+                    throw new IllegalStateException("duplicate sections in cache is impossible");
+                }
+                if (this.lruSize < this.lruSecondaryCache.size()) {
+                    evictedSection = this.lruSecondaryCache.removeFirst();
+                }
+                this.lruLock.unlockWrite(lruStamp);
+            } else {
+                lock.unlockWrite(stamp);
             }
-            //If cache is bigger than its ment to be, remove the least recently used and free it
-            if (this.lruSize < this.lruSecondaryCache.size()) {
-                aa = this.lruSecondaryCache.removeFirst();
+
+            if (evictedSection != null) {
+                evictedSection._releaseArray();
             }
-            this.lruLock.unlockWrite(stamp2);
-
-        } else {
-            lock.unlockWrite(stamp);
-        }
-
-
-        if (aa != null) {
-            aa._releaseArray();
-        }
-
-        if (sec != null) {
-            this.loadedSections.decrementAndGet();
+            if (removedSection != null) {
+                this.loadedSections.decrementAndGet();
+            }
+            return;
         }
     }
 
