@@ -1,95 +1,152 @@
-# Voxy NeoForge 1.21.1 非官方移植版
+# Neo-Voxy
 
-An unofficial NeoForge 1.21.1 port of **Voxy**, the high-performance Level of Detail terrain renderer for Minecraft.
+**Neo-Voxy** 是 Voxy 的 Minecraft 1.21.1 NeoForge 非官方移植与兼容性维护版本，目标是在保留 Voxy 高性能远景 LOD 架构的基础上，为 NeoForge、Sodium、Iris 及常见模组组合提供更稳定的使用体验。
 
-这是 **Voxy** 的非官方 NeoForge 1.21.1 移植版本,原地址https://github.com/JohnSnow14284/1.21.1-Neo-Voxy
+**Neo-Voxy** is an unofficial Minecraft 1.21.1 NeoForge port and compatibility-focused continuation of Voxy. It preserves Voxy's high-performance distant-terrain LOD architecture while improving stability across NeoForge, Sodium, Iris, and common modded environments.
 
-通过yarnobachmann的分支进行修改，但其基于的版本过于旧，性能表现很差，
-
-因此我结合原作者cortex的最新版（主要）和m3t4f1v3的分支版本进行修改，
-
-成功“套壳”到1.21.1Neoforge，且无需信雅互联和Fabricapi。
-
-> All original Voxy credit belongs to [MCRcortex](https://github.com/MCRcortex), the creator of Voxy.
-
-> Voxy 原作者为 [MCRcortex](https://github.com/MCRcortex)，本项目仅为非官方 NeoForge 移植与兼容性维护版本。
+> Voxy 由 [MCRcortex](https://github.com/MCRcortex) 创建。本项目不是 Voxy 官方版本，也不代表原作者、Mojang、Microsoft、NeoForge、Sodium 或 Iris。
+>
+> Voxy was created by [MCRcortex](https://github.com/MCRcortex). This project is unofficial and is not endorsed by the original author, Mojang, Microsoft, NeoForge, Sodium, or Iris.
 
 ---
 
-## What Works / 已实现功能
+## 特色功能 / Highlights
 
-* Distant Level of Detail terrain rendering
-  远距离 LOD 地形渲染
+- **高性能远景 LOD / High-performance distant LOD**
+  在原版区块范围之外绘制低细节地形，扩展可视距离并尽量控制 CPU、内存与 GPU 开销。
+  Renders reduced-detail terrain beyond the vanilla chunk range while keeping CPU, memory, and GPU overhead under control.
 
-* Sodium-based rendering integration
-  基于 Sodium 的渲染集成
+- **Sodium 渲染集成 / Sodium rendering integration**
+  接入 Sodium 的区块渲染阶段、相机数据与配置界面，而 LOD 网格仍使用 Voxy 的专用高性能渲染系统。
+  Integrates with Sodium's terrain rendering stages, camera data, and options UI while retaining Voxy's dedicated high-performance LOD renderer.
 
-* Sodium 0.8.x video settings UI integration
-  已集成到 Sodium 0.8.x 视频设置界面
+- **扩展区块请求 / Extended chunk requests**
+  提供类似 FakeSight 的扩展区块请求功能，当前最高上限为 48 区块。
+  Provides a FakeSight-style extended chunk request option with a current maximum of 48 chunks.
 
-* 可通过 Sodium / Voxy 设置界面调整配置
+- **无光影水体优化 / No-shader water improvements**
+  改善关闭光影时 LOD 水体的颜色、透明度、雾中表现与粗粒度海面衔接。
+  Improves LOD water colour, transparency, fog blending, and coarse sea-surface continuity when shaders are disabled.
 
-* 集成 FakeSight 风格的扩展区块请求功能，感谢大佬song_5007
-  
-* 已初步兼容Domum Ornamentum，修复模拟殖民地Domum Ornamentum方块颜色消失问题
+- **模组植物兼容 / Modded plant compatibility**
+  支持标准交叉面地面植物的轻量 LOD 表现，并尽量避免影响作物、藤蔓、睡莲等特殊模型。
+  Supports lightweight crossed-plane LOD models for standard ground plants while avoiding unwanted changes to crops, vines, lily pads, and other special models.
 
----
+- **荧光液正式兼容 / First-class Lumisene Fluids compatibility**
+  本项目已将 Lumisene Fluids（荧光液）列为正式兼容目标，并针对其流体 LOD 颜色与渲染行为进行适配。
+  This port treats Lumisene Fluids as a first-class compatibility target, including dedicated handling for its LOD fluid colour and rendering behaviour.
 
+- **Domum Ornamentum 正式兼容 / First-class Domum Ornamentum compatibility**
+  支持 Domum 动态材质、颜色映射与部分复杂外形的轻量代理模型，并仅在检测到 Domum 时启用相关逻辑。
+  Supports Domum dynamic materials, colour mapping, and lightweight proxy geometry for selected complex shapes, with the compatibility path enabled only when Domum is installed.
 
-## Requirements / 运行需求
-
-| Requirement | Version                                        |
-| ----------- | ---------------------------------------------- |
-| Minecraft   | 1.21.1                                         |
-| NeoForge    | 21.1.x                                         |
-| Java        | 21/25                                             |
-| Sodium      | mc1.21.1-0.8.x                                 |
-
-
-This version no longer requires Forgified Fabric API as a mandatory dependency.
-
-当前版本不再强制要求 Forgified Fabric API 作为前置依赖。
-
-Recommended optional mods:
-
-推荐可选 Mod：
-
-| Mod                    | Why                                        |
-| ---------------------- | ------------------------------------------ |
-| Lithium                | General game performance improvements      |
-| Iris                   | Shader testing, if supported by your setup |
-| Reese's Sodium Options | Optional Sodium settings UI enhancement    |
+- **保存与退出稳定性 / Save and shutdown reliability**
+  优化区块保存、卸载竞争与世界关闭顺序，降低退出世界时卡住或存储未完全释放的概率。
+  Improves section saving, unload races, and world shutdown ordering to reduce hangs and incomplete storage cleanup when leaving a world.
 
 ---
 
-## Credits / 鸣谢
+## 兼容性 / Compatibility
 
-* [MCRcortex](https://github.com/MCRcortex) - Original Voxy author（Voxy 原作者）
-  
-* [m3t4f1v3](https://github.com/m3t4f1v3) [yarnobachmann](https://github.com/yarnobachmann)- Forked Voxy author （Voxy 分支作者）
- 
-* [Original Voxy repository](https://github.com/MCRcortex/voxy) （ 原版 Voxy 仓库 ）
-  
-* NeoForge contributors（NeoForge 贡献者）
-  
-* Sodium contributors（Sodium 贡献者）
-  
-* Iris contributors（Iris 贡献者）
-    
-* FakeSight contributors（FakeSight 贡献者）
-  
-* The Minecraft modding community（Minecraft Mod 开发社区）
-  
+| Component | Supported Version | Status | Notes |
+|---|---:|---|---|
+| Minecraft | 1.21.1 | Required | Current target version |
+| NeoForge | 21.1.x | Required | Native NeoForge build |
+| Java | 21 | Required | Java 25 is used by CI builds |
+| Sodium | 0.8.x | Required | Rendering and options integration |
+| Iris | 1.8.x | Optional | Shader support depends on the selected shader pack |
+| Lithium | 0.15.x | Optional | Recommended general performance improvement |
+| Lumisene Fluids | 1.21.1 builds | Supported | First-class LOD fluid compatibility |
+| Domum Ornamentum | 1.21.1 builds | Supported | Dynamic material and proxy-model compatibility |
+
+Neo-Voxy 不再强制要求 Forgified Fabric API 作为独立前置；实际依赖以发布页面和模组加载器提示为准。
+
+Neo-Voxy no longer requires Forgified Fabric API as a separate mandatory prerequisite. The release page and loader dependency report remain the final source of truth.
 
 ---
 
-## License / 许可证
+## 安装 / Installation
 
-See [LICENSE.md](LICENSE.md).
+1. 安装 Minecraft 1.21.1、NeoForge 21.1.x、Java 21 和兼容版本的 Sodium。
+   Install Minecraft 1.21.1, NeoForge 21.1.x, Java 21, and a compatible Sodium build.
+2. 将 `neo-voxy-<version>.jar` 放入实例的 `mods` 文件夹。
+   Place `neo-voxy-<version>.jar` in the instance's `mods` directory.
+3. 建议首次测试时新建世界，或备份世界和旧 Voxy 缓存。
+   A new test world, or a backup of the world and existing Voxy cache, is recommended for initial testing.
+4. 通过 Sodium 视频设置中的 Neo-Voxy 页面调整 LOD 与扩展区块请求参数。
+   Configure LOD and extended chunk request settings from the Neo-Voxy page in Sodium's video settings.
+
+---
+
+## 配置说明 / Configuration Notes
+
+- 修改较大的 LOD 参数后，部分内容可能需要重新进入世界、重新加载渲染器或重建旧缓存才能完全体现。
+  After major LOD setting changes, re-entering the world, reloading the renderer, or rebuilding old cache data may be required for the result to fully appear.
+- Domum Ornamentum 的旧缓存可能缺少动态材质信息；测试新兼容逻辑时建议清理对应世界的旧 Voxy 缓存。
+  Old Domum Ornamentum cache data may not contain dynamic material metadata; clearing the affected world's old Voxy cache is recommended when testing the new compatibility path.
+- 光影兼容性取决于 Iris、Sodium、光影包及其他渲染模组的组合。
+  Shader compatibility depends on the combination of Iris, Sodium, the shader pack, and other rendering mods.
+
+---
+
+## 上游同步与维护 / Upstream Sync and Maintenance
+
+本项目会定期跟踪并持续合并 Voxy 上游的性能优化、错误修复和架构改进。所有上游改动都会根据 Minecraft 1.21.1、NeoForge 21.1.x 以及本项目已有兼容功能进行重新适配与测试，而不是直接覆盖本分支的独有实现。
+
+This project periodically tracks and continuously integrates upstream Voxy performance improvements, bug fixes, and architectural changes. Upstream changes are adapted and reviewed for Minecraft 1.21.1, NeoForge 21.1.x, and this port's existing compatibility work instead of replacing branch-specific implementations wholesale.
+
+---
+
+## 构建 / Building
+
+Windows PowerShell：
+Windows PowerShell:
+
+```powershell
+.\gradlew clean build
+```
+
+Linux 或 GitHub Actions：
+Linux or GitHub Actions:
+
+```bash
+./gradlew clean build
+```
+
+发布文件位于 `build/libs`，正式分发文件名为：
+Release files are written to `build/libs` using the following distribution name:
+
+```text
+neo-voxy-<version>.jar
+```
+
+构建过程仍会生成一个带 `-unoptimized` 后缀的中间包，仅用于诊断，不应作为发布文件上传。
+
+The build may also retain an intermediate JAR with the `-unoptimized` suffix for diagnostics. It should not be distributed.
+
+---
+
+## 鸣谢 / Credits
+
+| Project or Contributor | Contribution |
+|---|---|
+| [MCRcortex](https://github.com/MCRcortex) | Original Voxy author |
+| [m3t4f1v3](https://github.com/m3t4f1v3) | Community fork and implementation references |
+| [yarnobachmann](https://github.com/yarnobachmann) | Earlier NeoForge porting work |
+| Sodium contributors | Rendering infrastructure and performance work |
+| Iris contributors | Shader integration ecosystem |
+| NeoForge contributors | NeoForge platform and tooling |
+| FakeSight contributors | Extended chunk request concept |
+| Minecraft modding community | Testing, issue reports, and compatibility feedback |
+
+感谢所有原作者、分支维护者、测试者和问题反馈者。
+
+Thanks to all original authors, fork maintainers, testers, and issue reporters.
+
+---
+
+## 许可证 / License
 
 请查看 [LICENSE.md](LICENSE.md)。
 
-This is an unofficial port and is not affiliated with Mojang, Microsoft, NeoForge, Sodium, Iris, or the original Voxy project.
-
-这是一个非官方移植版本，与 Mojang、Microsoft、NeoForge、Sodium、Iris 或原版 Voxy 项目无官方关联。
-
+See [LICENSE.md](LICENSE.md).

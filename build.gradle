@@ -256,6 +256,10 @@ java {
 }
 
 jar {
+    // Keep the full dependency bundle as an intermediate artifact. The optimized
+    // distribution produced below uses the normal release filename.
+    archiveClassifier.set('unoptimized')
+
     from("LICENSE") {
         rename { "${it}_${project.archives_base_name}"}
     }
@@ -414,10 +418,11 @@ def slimJarTask = tasks.register('slimJar', SlimJarTask) {
     dependsOn productionJar
     sourceJar.set(productionJar.flatMap { it.archiveFile })
     targetJar.set(layout.buildDirectory.file(
-            "libs/${project.archives_base_name}-${project.version}-slim.jar"))
+            "libs/${project.archives_base_name}-${project.version}.jar"))
 }
 
-// A normal `gradlew build` now produces both the regular and compact JARs.
+// A normal `gradlew build` produces the optimized release JAR and keeps the
+// unoptimized bundle available only as a diagnostic artifact.
 tasks.named('build') {
     dependsOn slimJarTask
 }

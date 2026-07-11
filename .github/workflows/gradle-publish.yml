@@ -41,9 +41,11 @@ jobs:
           echo "=== All JAR files in workspace ==="
           find . -name "*.jar" -type f
 
-      - name: Upload slim build artifact
+      - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
           name: neo-voxy
-          path: build/libs/*-slim.jar
+          path: |
+            build/libs/neo-voxy-*.jar
+            !build/libs/*-unoptimized.jar
           if-no-files-found: error
