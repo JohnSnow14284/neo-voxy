@@ -33,14 +33,16 @@ public class ClientVoxyMixinPlugin implements IMixinConfigPlugin {
 
     @Override public List<String> getMixins() {
         List<String> mixins = new ArrayList<>();
-        if (valkyrienSkiesInstalled && !nvidiumInstalled) {
+        // Sable and Aeronautics append transformed sub-level geometry at the tail of
+        // SodiumWorldRenderer.drawChunkLayer. Rendering Voxy from DefaultChunkRenderer would run
+        // too early, before those additions have finished updating the active terrain targets.
+        // Use a dedicated late hook for this combination instead.
+        if (sableInstalled) {
+            mixins.add("sable.MixinSablePostTerrainRenderer");
+        } else if (valkyrienSkiesInstalled && !nvidiumInstalled) {
             mixins.add("sodium.MixinSodiumWorldRendererVS");
         } else {
             mixins.add("sodium.MixinDefaultChunkRenderer");
-        }
-
-        if (sableInstalled) {
-            mixins.add("sable.MixinSableDepthBridge");
         }
 
         return mixins;
