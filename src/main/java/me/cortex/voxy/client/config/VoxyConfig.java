@@ -12,8 +12,10 @@ import net.neoforged.fml.loading.FMLPaths;
 import java.io.FileReader;
 import java.io.IOException;
 import java.lang.reflect.Modifier;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 
 public class VoxyConfig {
@@ -26,7 +28,7 @@ public class VoxyConfig {
     private static final Gson GSON = new GsonBuilder()
             .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
             .setPrettyPrinting()
-            .excludeFieldsWithModifiers(Modifier.PRIVATE)
+            .excludeFieldsWithModifiers(Modifier.PRIVATE, Modifier.STATIC, Modifier.TRANSIENT)
             .create();
 
     public static VoxyConfig CONFIG = loadOrCreate();
@@ -97,11 +99,12 @@ public class VoxyConfig {
                     } else {
                         Logger.error("Failed to load voxy config, resetting");
                     }
-                } catch (IOException e) {
-                    Logger.error("Could not parse config", e);
+                } catch (IOException | RuntimeException e) {
+                    Logger.error("Could not load Voxy config; resetting it", e);
+                    backupInvalidConfig(path);
                 }
             }
-            Logger.info("Config doesnt exist, creating new");
+            Logger.info("Config does not exist, creating a new one");
             var config = new VoxyConfig();
             config.save();
             return config;
@@ -129,10 +132,31 @@ public class VoxyConfig {
         }
 
         this.sanitize();
+        Path path = getConfigPath();
+        Path temporary = path.resolveSibling(path.getFileName() + ".tmp");
         try {
-            Files.writeString(getConfigPath(), GSON.toJson(this));
+            Files.createDirectories(path.getParent());
+            Files.writeString(temporary, GSON.toJson(this));
+            try {
+                Files.move(temporary, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException ignored) {
+                Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             Logger.error("Failed to write config file", e);
+            try {
+                Files.deleteIfExists(temporary);
+            } catch (IOException ignored) {
+            }
+        }
+    }
+
+    private static void backupInvalidConfig(Path path) {
+        try {
+            Path backup = path.resolveSibling(path.getFileName() + ".invalid");
+            Files.move(path, backup, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException backupFailure) {
+            Logger.error("Failed to back up invalid Voxy config", backupFailure);
         }
     }
 

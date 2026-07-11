@@ -1,0 +1,1014 @@
+diff --git a/gradle.properties b/gradle.properties
+index 995218c..ca360ea 100644
+--- a/gradle.properties
++++ b/gradle.properties
+@@ -12,6 +12,6 @@ neogradle_version=7.0.163
+ 
+ 
+ # Mod Properties
+-mod_version = 0.2.16-beta.1
++mod_version = 0.2.16-beta.2
+ maven_group = me.cortex
+ archives_base_name = neo-voxy
+diff --git a/src/main/java/me/cortex/voxy/client/config/VoxyConfig.java b/src/main/java/me/cortex/voxy/client/config/VoxyConfig.java
+index faeda05..e5a9bd9 100644
+--- a/src/main/java/me/cortex/voxy/client/config/VoxyConfig.java
++++ b/src/main/java/me/cortex/voxy/client/config/VoxyConfig.java
+@@ -12,8 +12,10 @@ import net.neoforged.fml.loading.FMLPaths;
+ import java.io.FileReader;
+ import java.io.IOException;
+ import java.lang.reflect.Modifier;
++import java.nio.file.AtomicMoveNotSupportedException;
+ import java.nio.file.Files;
+ import java.nio.file.Path;
++import java.nio.file.StandardCopyOption;
+ import java.util.Locale;
+ 
+ public class VoxyConfig {
+@@ -26,7 +28,7 @@ public class VoxyConfig {
+     private static final Gson GSON = new GsonBuilder()
+             .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+             .setPrettyPrinting()
+-            .excludeFieldsWithModifiers(Modifier.PRIVATE)
++            .excludeFieldsWithModifiers(Modifier.PRIVATE, Modifier.STATIC, Modifier.TRANSIENT)
+             .create();
+ 
+     public static VoxyConfig CONFIG = loadOrCreate();
+@@ -97,11 +99,12 @@ public class VoxyConfig {
+                     } else {
+                         Logger.error("Failed to load voxy config, resetting");
+                     }
+-                } catch (IOException e) {
+-                    Logger.error("Could not parse config", e);
++                } catch (IOException | RuntimeException e) {
++                    Logger.error("Could not load Voxy config; resetting it", e);
++                    backupInvalidConfig(path);
+                 }
+             }
+-            Logger.info("Config doesnt exist, creating new");
++            Logger.info("Config does not exist, creating a new one");
+             var config = new VoxyConfig();
+             config.save();
+             return config;
+@@ -129,10 +132,31 @@ public class VoxyConfig {
+         }
+ 
+         this.sanitize();
++        Path path = getConfigPath();
++        Path temporary = path.resolveSibling(path.getFileName() + ".tmp");
+         try {
+-            Files.writeString(getConfigPath(), GSON.toJson(this));
++            Files.createDirectories(path.getParent());
++            Files.writeString(temporary, GSON.toJson(this));
++            try {
++                Files.move(temporary, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
++            } catch (AtomicMoveNotSupportedException ignored) {
++                Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING);
++            }
+         } catch (IOException e) {
+             Logger.error("Failed to write config file", e);
++            try {
++                Files.deleteIfExists(temporary);
++            } catch (IOException ignored) {
++            }
++        }
++    }
++
++    private static void backupInvalidConfig(Path path) {
++        try {
++            Path backup = path.resolveSibling(path.getFileName() + ".invalid");
++            Files.move(path, backup, StandardCopyOption.REPLACE_EXISTING);
++        } catch (IOException backupFailure) {
++            Logger.error("Failed to back up invalid Voxy config", backupFailure);
+         }
+     }
+ 
+diff --git a/src/main/java/me/cortex/voxy/client/core/model/ModelFactory.java b/src/main/java/me/cortex/voxy/client/core/model/ModelFactory.java
+index 2191d5d..fc3a2bf 100644
+--- a/src/main/java/me/cortex/voxy/client/core/model/ModelFactory.java
++++ b/src/main/java/me/cortex/voxy/client/core/model/ModelFactory.java
+@@ -1,5 +1,6 @@
+ package me.cortex.voxy.client.core.model;
+ 
++import me.cortex.voxy.commonImpl.compat.DomumOrnamentumCompat;
+ import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
+ import it.unimi.dsi.fastutil.objects.Object2IntMap;
+ import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
+@@ -135,7 +136,7 @@ public class ModelFactory {
+     public ModelFactory(Mapper mapper, ModelStore storage) {
+         this.mapper = mapper;
+         this.storage = storage;
+-        this.bakery2 = new SoftwareModelTextureBakery();
++        this.bakery2 = new SoftwareModelTextureBakery(mapper);
+         this.bakery2.setupTexture();
+ 
+         this.metadataCache = new long[1<<16];
+@@ -395,16 +396,17 @@ public class ModelFactory {
+             }
+         }
+ 
+-        var colourProvider = getColourProvider(blockState);
++        BlockState colourState = DomumOrnamentumCompat.getColourState(this.mapper, blockId, blockState);
++        var colourProvider = colourState == null ? null : getColourProvider(colourState);
+ 
+         boolean isBiomeColourDependent = false;
+         if (colourProvider != null) {
+-            isBiomeColourDependent = isBiomeDependentColour(colourProvider, blockState);
++            isBiomeColourDependent = isBiomeDependentColour(colourProvider, colourState);
+         }
+ 
+         ModelEntry entry;
+         {//Deduplicate same entries
+-            entry = new ModelEntry(textureData, clientFluidStateId, isBiomeColourDependent||colourProvider==null?-1:captureColourConstant(colourProvider, blockState, DEFAULT_BIOME)|0xFF000000);
++            entry = new ModelEntry(textureData, clientFluidStateId, isBiomeColourDependent||colourProvider==null?-1:captureColourConstant(colourProvider, colourState, DEFAULT_BIOME)|0xFF000000);
+             int possibleDuplicate = this.modelTexture2id.getInt(entry);
+             if (possibleDuplicate != -1) {//Duplicate found
+                 this.idMappings[blockId] = possibleDuplicate;
+@@ -628,12 +630,12 @@ public class ModelFactory {
+             //Populate the list of biomes for the model state
+             int biomeIndex = this.modelsRequiringBiomeColours.size() * this.biomes.size();
+             MemoryUtil.memPutInt(uploadPtr, biomeIndex);
+-            this.modelsRequiringBiomeColours.add(new Pair<>(modelId, blockState));
++            this.modelsRequiringBiomeColours.add(new Pair<>(modelId, colourState));
+             if (!this.biomes.isEmpty()) {
+                 uploadResult.biomeUploadIndex = biomeIndex;
+                 long clrUploadPtr = (uploadResult.biomeUpload = new MemoryBuffer(4L * this.biomes.size())).address;
+                 for (var biome : this.biomes) {
+-                    MemoryUtil.memPutInt(clrUploadPtr, captureColourConstant(colourProvider, blockState, biome) | 0xFF000000); clrUploadPtr += 4;
++                    MemoryUtil.memPutInt(clrUploadPtr, captureColourConstant(colourProvider, colourState, biome) | 0xFF000000); clrUploadPtr += 4;
+                 }
+             }
+         }
+diff --git a/src/main/java/me/cortex/voxy/client/core/model/bakery/ReuseVertexConsumer.java b/src/main/java/me/cortex/voxy/client/core/model/bakery/ReuseVertexConsumer.java
+index d3f566a..e0fd031 100644
+--- a/src/main/java/me/cortex/voxy/client/core/model/bakery/ReuseVertexConsumer.java
++++ b/src/main/java/me/cortex/voxy/client/core/model/bakery/ReuseVertexConsumer.java
+@@ -24,6 +24,8 @@ public final class ReuseVertexConsumer implements VertexConsumer {
+     private int count;
+     private int defaultMeta;
+     private boolean vertexAlphaOnly;
++    private int fallbackTintColour = -1;
++    private int forcedTintColour = -1;
+ 
+     public boolean anyShaded;
+     public boolean anyDarkendTex;
+@@ -52,6 +54,17 @@ public final class ReuseVertexConsumer implements VertexConsumer {
+         return this;
+     }
+ 
++    public ReuseVertexConsumer setFallbackTintColour(int colour) {
++        this.fallbackTintColour = colour;
++        return this;
++    }
++
++    public ReuseVertexConsumer setForcedTintColour(int colour) {
++        this.forcedTintColour = colour;
++        return this;
++    }
++
++
+     @Override
+     public ReuseVertexConsumer addVertex(float x, float y, float z) {
+         this.ensureCanPut();
+@@ -119,11 +132,15 @@ public final class ReuseVertexConsumer implements VertexConsumer {
+         int meta = 0;
+         meta |= shouldEnableAlphaDiscard(quad, forceSolid, layer) ? 1 : 0;//has discard
+ 
+-        int tintColour = -1;
+-        if (quad.isTinted()) {
+-            tintColour = captureTintColour(state, quad.getTintIndex());
++        int tintColour = this.forcedTintColour;
++        if (tintColour == -1 && quad.isTinted()) {
++            int tintIndex = quad.getTintIndex();
++            tintColour = captureTintColour(state, tintIndex);
++            if (tintColour == -1 && tintIndex > 0xFF) {
++                tintColour = this.fallbackTintColour;
++            }
+             if (tintColour == -1) {
+-                meta |= 4;//has tinting, keep Voxy's normal biome/constant tint path
++                meta |= 4;
+             }
+         }
+         return this.quad(quad, meta, tintColour);
+@@ -386,6 +403,8 @@ public final class ReuseVertexConsumer implements VertexConsumer {
+         this.anyDiscard = false;
+         this.defaultMeta = 0;//RESET THE DEFAULT META
+         this.vertexAlphaOnly = false;
++        this.fallbackTintColour = -1;
++        this.forcedTintColour = -1;
+         this.count = 0;
+         this.ptr = this.buffer.address - VERTEX_FORMAT_SIZE;//the thing is first time this gets incremented by FORMAT_STRIDE
+         return this;
+diff --git a/src/main/java/me/cortex/voxy/client/core/model/bakery/SoftwareModelTextureBakery.java b/src/main/java/me/cortex/voxy/client/core/model/bakery/SoftwareModelTextureBakery.java
+index 078c499..6e849e8 100644
+--- a/src/main/java/me/cortex/voxy/client/core/model/bakery/SoftwareModelTextureBakery.java
++++ b/src/main/java/me/cortex/voxy/client/core/model/bakery/SoftwareModelTextureBakery.java
+@@ -7,6 +7,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
+ 
+ import me.cortex.voxy.client.core.model.ModelFactory;
+ import me.cortex.voxy.common.util.UnsafeUtil;
++import me.cortex.voxy.common.world.other.Mapper;
+ import me.cortex.voxy.commonImpl.compat.DomumOrnamentumCompat;
+ import net.minecraft.client.Minecraft;
+ import net.minecraft.client.renderer.ItemBlockRenderTypes;
+@@ -57,9 +58,10 @@ public class SoftwareModelTextureBakery {
+     private final ReuseVertexConsumer opaqueVC = new ReuseVertexConsumer();
+     private final ReuseVertexConsumer translucentVC = new ReuseVertexConsumer(1/*has discard*/);
+     private final SoftwareRasterizer rasterizer = new SoftwareRasterizer(ModelFactory.MODEL_TEXTURE_SIZE);
++    private final Mapper mapper;
+ 
+-
+-    public SoftwareModelTextureBakery() {
++    public SoftwareModelTextureBakery(Mapper mapper) {
++        this.mapper = mapper;
+     }
+ 
+     public void setupTexture() {
+@@ -100,21 +102,27 @@ public class SoftwareModelTextureBakery {
+         if (state.getRenderShape() == RenderShape.INVISIBLE) {
+             return;// Dont bake if invisible
+         }
++        var plan = DomumOrnamentumCompat.getBakePlan(this.mapper, blockId);
++        BlockState modelState = plan.modelState() == null ? state : plan.modelState();
++        ModelData modelData = plan.modelData();
+         var model = Minecraft.getInstance()
+                 .getModelManager()
+                 .getBlockModelShaper()
+-                .getBlockModel(state);
++                .getBlockModel(modelState);
++
++        int forcedTint = plan.forceTint() ? plan.fallbackTintAbgr() : -1;
++        this.opaqueVC.setFallbackTintColour(plan.fallbackTintAbgr()).setForcedTintColour(forcedTint);
++        this.translucentVC.setFallbackTintColour(plan.fallbackTintAbgr()).setForcedTintColour(forcedTint);
+ 
+-        ModelData modelData = DomumOrnamentumCompat.getModelData(blockId, state);
+         for (Direction direction : new Direction[] { Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH,
+                 Direction.WEST, Direction.EAST, null }) {
+             var random = new SingleThreadedRandomSource(42L);
+             var quads = modelData == ModelData.EMPTY
+-                    ? model.getQuads(state, direction, random)
+-                    : model.getQuads(state, direction, random, modelData, layer);
++                    ? model.getQuads(modelState, direction, random)
++                    : model.getQuads(modelState, direction, random, modelData, layer);
+             for (var quad : quads) {
+                 (layer == RenderType.translucent() ? this.translucentVC : this.opaqueVC)
+-                        .quad(quad, state.is(BlockTags.LEAVES), layer, state);
++                        .quad(quad, modelState.is(BlockTags.LEAVES), layer, modelState);
+             }
+         }
+     }
+diff --git a/src/main/java/me/cortex/voxy/common/world/other/Mapper.java b/src/main/java/me/cortex/voxy/common/world/other/Mapper.java
+index 0273dda..653c844 100644
+--- a/src/main/java/me/cortex/voxy/common/world/other/Mapper.java
++++ b/src/main/java/me/cortex/voxy/common/world/other/Mapper.java
+@@ -4,6 +4,7 @@ import com.mojang.serialization.Dynamic;
+ import it.unimi.dsi.fastutil.objects.ObjectArrayList;
+ import me.cortex.voxy.common.Logger;
+ import me.cortex.voxy.common.config.IMappingStorage;
++import me.cortex.voxy.commonImpl.compat.DomumOrnamentumCompat;
+ import me.cortex.voxy.common.world.other.Mapper.BiomeEntry;
+ import me.cortex.voxy.common.world.other.Mapper.StateEntry;
+ import net.minecraft.SharedConstants;
+@@ -61,7 +62,7 @@ public class Mapper {
+     private Consumer<StateEntry> newStateCallback;
+     private Consumer<BiomeEntry> newBiomeCallback;
+ 
+-    private record VariantStateKey(BlockState state, Object variantKey) { }
++    private record VariantStateKey(BlockState state, String variantType, String variantKey) { }
+ 
+     public Mapper(IMappingStorage storage) {
+         this.storage = storage;
+@@ -140,9 +141,18 @@ public class Mapper {
+                     continue;
+                 }
+ 
++                if (sentry.isVariant()) {
++                    this.variantBlock2stateEntry.putIfAbsent(
++                            new VariantStateKey(sentry.state, sentry.variantType, sentry.variantKey), sentry);
++                    DomumOrnamentumCompat.restoreVariant(
++                            this, sentry.id, sentry.state, sentry.variantType, sentry.variantData);
++                    continue;
++                }
++
+                 var oldEntry = this.block2stateEntry.putIfAbsent(sentry.state, sentry);
+-                if (oldEntry != null) {
+-                    Logger.warn("Multiple mappings for blockstate, using old state, expect things to possibly go really badly. " + oldEntry.id + ":" + sentry.id + ":" + sentry.state );
++                if (oldEntry != null && !DomumOrnamentumCompat.isDomumState(sentry.state)) {
++                    Logger.warn("Multiple mappings for blockstate " + sentry.state + ": "
++                            + oldEntry.id + " and " + sentry.id);
+                 }
+             } else if (entryType == BIOME_TYPE) {
+                 var bentry = BiomeEntry.deserialize(id, entry.getValue());
+@@ -193,18 +203,23 @@ public class Mapper {
+         this.block2stateEntry.put(state, entry);
+         this.blockLock.unlock();
+ 
+-        byte[] serialized = entry.serialize();
+-        ByteBuffer buffer = MemoryUtil.memAlloc(serialized.length);
+-        buffer.put(serialized);
+-        buffer.rewind();
+-        this.storage.putIdMapping(entry.id | (BLOCK_STATE_TYPE<<30), buffer);
+-        MemoryUtil.memFree(buffer);
+-        //this.storage.flush();
++        this.persistStateEntry(entry);
+ 
+         if (this.newStateCallback!=null)this.newStateCallback.accept(entry);
+         return entry;
+     }
+ 
++    private void persistStateEntry(StateEntry entry) {
++        byte[] serialized = entry.serialize();
++        ByteBuffer buffer = MemoryUtil.memAlloc(serialized.length);
++        try {
++            buffer.put(serialized).rewind();
++            this.storage.putIdMapping(entry.id | (BLOCK_STATE_TYPE << 30), buffer);
++        } finally {
++            MemoryUtil.memFree(buffer);
++        }
++    }
++
+     private BiomeEntry registerNewBiome(String biome) {
+         this.biomeLock.lock();
+         var entry = this.biome2biomeEntry.get(biome);
+@@ -251,21 +266,16 @@ public class Mapper {
+         return mapping.id;
+     }
+ 
+-    /**
+-     * Registers a virtual block-state id that uses the same BlockState for all
+-     * vanilla metadata, but must be baked as a distinct client model. This is
+-     * used for block-entity-driven model data such as Domum Ornamentum material
+-     * variants. The default BlockState mapping is intentionally left unchanged.
+-     */
+-    public int getIdForBlockStateVariant(BlockState state, Object variantKey) {
++    public int getIdForBlockStateVariant(BlockState state, String variantType,
++                                             String variantKey, CompoundTag variantData) {
+         if (state.isAir()) {
+             return 0;
+         }
+-        if (variantKey == null) {
++        if (variantKey == null || variantKey.isEmpty()) {
+             return this.getIdForBlockState(state);
+         }
+ 
+-        var key = new VariantStateKey(state, variantKey);
++        var key = new VariantStateKey(state, variantType, variantKey);
+         var mapping = this.variantBlock2stateEntry.get(key);
+         if (mapping != null) {
+             return mapping.id;
+@@ -278,20 +288,15 @@ public class Mapper {
+                 return mapping.id;
+             }
+ 
+-            mapping = new StateEntry(this.blockId2stateEntry.size(), state);
++            mapping = new StateEntry(this.blockId2stateEntry.size(), state,
++                    variantType, variantKey, variantData);
+             this.blockId2stateEntry.add(mapping);
+             this.variantBlock2stateEntry.put(key, mapping);
+         } finally {
+             this.blockLock.unlock();
+         }
+ 
+-        byte[] serialized = mapping.serialize();
+-        ByteBuffer buffer = MemoryUtil.memAlloc(serialized.length);
+-        buffer.put(serialized);
+-        buffer.rewind();
+-        this.storage.putIdMapping(mapping.id | (BLOCK_STATE_TYPE<<30), buffer);
+-        MemoryUtil.memFree(buffer);
+-
++        this.persistStateEntry(mapping);
+         if (this.newStateCallback != null) {
+             this.newStateCallback.accept(mapping);
+         }
+@@ -355,7 +360,7 @@ public class Mapper {
+     }
+ 
+     public void forceResaveStates() {
+-        var blocks = new ArrayList<>(this.block2stateEntry.values());
++        var blocks = new ArrayList<>(this.blockId2stateEntry);
+         var biomes = new ArrayList<>(this.biome2biomeEntry.values());
+ 
+ 
+@@ -366,12 +371,7 @@ public class Mapper {
+             if (this.blockId2stateEntry.indexOf(entry) != entry.id) {
+                 throw new IllegalStateException("State Id NOT THE SAME, very critically bad. arr:" + this.blockId2stateEntry.indexOf(entry) + " entry: " + entry.id);
+             }
+-            byte[] serialized = entry.serialize();
+-            ByteBuffer buffer = MemoryUtil.memAlloc(serialized.length);
+-            buffer.put(serialized);
+-            buffer.rewind();
+-            this.storage.putIdMapping(entry.id | (BLOCK_STATE_TYPE<<30), buffer);
+-            MemoryUtil.memFree(buffer);
++            this.persistStateEntry(entry);
+         }
+ 
+         for (var entry : biomes) {
+@@ -391,7 +391,7 @@ public class Mapper {
+     }
+ 
+     public void close() {
+-
++        DomumOrnamentumCompat.closeMapper(this);
+     }
+ 
+ 
+@@ -399,9 +399,21 @@ public class Mapper {
+         public final int id;
+         public final BlockState state;
+         public final int opacity;
++        public final String variantType;
++        public final String variantKey;
++        public final CompoundTag variantData;
++
+         public StateEntry(int id, BlockState state) {
++            this(id, state, null, null, null);
++        }
++
++        public StateEntry(int id, BlockState state, String variantType,
++                          String variantKey, CompoundTag variantData) {
+             this.id = id;
+             this.state = state;
++            this.variantType = variantType;
++            this.variantKey = variantKey;
++            this.variantData = variantData == null ? null : variantData.copy();
+             //Override opacity of leaves to be solid
+             if (state.getBlock() instanceof LeavesBlock) {
+                 this.opacity = 15;
+@@ -437,11 +449,22 @@ public class Mapper {
+             }
+         }
+ 
++        public boolean isVariant() {
++            return this.variantType != null && this.variantKey != null;
++        }
++
+         public byte[] serialize() {
+             try {
+                 var serialized = new CompoundTag();
+                 serialized.putInt("id", this.id);
+                 serialized.put("block_state", BlockState.CODEC.encodeStart(NbtOps.INSTANCE, this.state).result().get());
++                if (this.isVariant()) {
++                    serialized.putString("variant_type", this.variantType);
++                    serialized.putString("variant_key", this.variantKey);
++                    if (this.variantData != null) {
++                        serialized.put("variant_data", this.variantData.copy());
++                    }
++                }
+                 var out = new ByteArrayOutputStream();
+                 NbtIo.writeCompressed(serialized, out);
+                 return out.toByteArray();
+@@ -468,9 +491,14 @@ public class Mapper {
+                 }
+ 
+                 var encodedState = compound.getCompound("block_state");
++                String variantType = compound.contains("variant_type") ? compound.getString("variant_type") : null;
++                String variantKey = compound.contains("variant_key") ? compound.getString("variant_key") : null;
++                CompoundTag variantData = compound.contains("variant_data")
++                        ? compound.getCompound("variant_data") : null;
++
+                 var decoded = BlockState.CODEC.parse(NbtOps.INSTANCE, encodedState);
+                 if (!decoded.isError()) {
+-                    return new StateEntry(id, decoded.getOrThrow());
++                    return new StateEntry(id, decoded.getOrThrow(), variantType, variantKey, variantData);
+                 }
+ 
+                 Logger.info("Stored block state needs data fixing: " + decoded.error().get().message());
+@@ -491,7 +519,7 @@ public class Mapper {
+ 
+                 forceResave[0] = true;
+                 Logger.info("Updated stored block state to: " + decoded.getOrThrow());
+-                return new StateEntry(id, decoded.getOrThrow());
++                return new StateEntry(id, decoded.getOrThrow(), variantType, variantKey, variantData);
+             } catch (IOException readFailure) {
+                 return airReplacement(id, forceResave, "Unable to read a stored block state", readFailure);
+             } catch (RuntimeException decodeFailure) {
+diff --git a/src/main/java/me/cortex/voxy/commonImpl/compat/DomumOrnamentumCompat.java b/src/main/java/me/cortex/voxy/commonImpl/compat/DomumOrnamentumCompat.java
+index 1ea9881..7654cb0 100644
+--- a/src/main/java/me/cortex/voxy/commonImpl/compat/DomumOrnamentumCompat.java
++++ b/src/main/java/me/cortex/voxy/commonImpl/compat/DomumOrnamentumCompat.java
+@@ -2,8 +2,16 @@ package me.cortex.voxy.commonImpl.compat;
+ 
+ import me.cortex.voxy.common.world.other.Mapper;
+ import net.minecraft.core.BlockPos;
++import net.minecraft.core.registries.BuiltInRegistries;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.ListTag;
++import net.minecraft.nbt.Tag;
++import net.minecraft.resources.ResourceLocation;
++import net.minecraft.world.level.block.Block;
++import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.entity.BlockEntity;
+ import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+ import net.minecraft.world.level.chunk.LevelChunk;
+ import net.minecraft.world.level.chunk.LevelChunkSection;
+ import net.neoforged.fml.ModList;
+@@ -12,41 +20,75 @@ import net.neoforged.neoforge.client.model.data.ModelProperty;
+ 
+ import java.lang.reflect.Field;
+ import java.lang.reflect.Method;
++import java.nio.charset.StandardCharsets;
++import java.security.MessageDigest;
++import java.security.NoSuchAlgorithmException;
++import java.util.ArrayList;
++import java.util.Comparator;
++import java.util.HexFormat;
+ import java.util.Map;
++import java.util.Optional;
+ import java.util.concurrent.ConcurrentHashMap;
+ 
+-/**
+- * Compatibility bridge for Domum Ornamentum materially textured blocks.
+- *
+- * The expensive part of the original bridge was doing variant-key construction
+- * and virtual id lookup for every voxel in a section. This version resolves
+- * Domum block entities once when the section is queued, stores only the local
+- * voxel indexes that actually need a material variant, and then keeps the hot
+- * voxel conversion path as a single array lookup.
+- */
+ public final class DomumOrnamentumCompat {
+-    private static final boolean LOADED = ModList.get().isLoaded("domum_ornamentum");
+-    private static final String DOMUM_PACKAGE = "com.ldtteam.domumornamentum";
+-    private static final String DOMUM_MODEL_PROPERTIES = "com.ldtteam.domumornamentum.client.model.properties.ModProperties";
++    public static final String VARIANT_TYPE = "domum_ornamentum";
+ 
+-    private static final ThreadLocal<int[]> SECTION_MAPPED_BLOCK_IDS = new ThreadLocal<>();
+-    private static final Map<Integer, ModelData> MODEL_DATA_BY_BLOCK_ID = new ConcurrentHashMap<>();
++    private static final boolean LOADED = ModList.get().isLoaded(VARIANT_TYPE);
++    private static final String PACKAGE_PREFIX = "com.ldtteam.domumornamentum";
++    private static final String MODEL_PROPERTIES = PACKAGE_PREFIX + ".client.model.properties.ModProperties";
++    private static final String TEXTURE_DATA_CLASS = PACKAGE_PREFIX + ".client.model.data.MaterialTextureData";
++
++    private static final ThreadLocal<int[]> SECTION_IDS = new ThreadLocal<>();
++    private static final Map<Mapper, Map<Integer, BakePlan>> BAKE_PLANS = new ConcurrentHashMap<>();
++    private static final Map<Object, VariantDescriptor> DESCRIPTORS = new ConcurrentHashMap<>();
++
++    private static final ClassValue<Boolean> DOMUM_BLOCK_ENTITIES = new ClassValue<>() {
++        @Override
++        protected Boolean computeValue(Class<?> type) {
++            return type.getName().startsWith(PACKAGE_PREFIX);
++        }
++    };
++
++    private static final ClassValue<Optional<Method>> TEXTURE_DATA_METHODS = new ClassValue<>() {
++        @Override
++        protected Optional<Method> computeValue(Class<?> type) {
++            try {
++                return Optional.of(type.getMethod("getTextureData"));
++            } catch (ReflectiveOperationException ignored) {
++                return Optional.empty();
++            }
++        }
++    };
+ 
+-    private static volatile Method getTextureDataMethod;
+-    private static volatile boolean getTextureDataMethodMissing;
+     private static volatile ModelProperty<?> materialTextureProperty;
+     private static volatile boolean materialTexturePropertyMissing;
+ 
+     private DomumOrnamentumCompat() {
+     }
+ 
++    public record BakePlan(ModelData modelData, BlockState modelState, BlockState colourState,
++                           int fallbackTintAbgr, boolean forceTint) {
++        private static final BakePlan EMPTY = new BakePlan(ModelData.EMPTY, null, null, -1, false);
++    }
++
++    private record VariantDescriptor(String key, CompoundTag data, BlockState colourState, int tintAbgr) {
++    }
++
+     public static boolean isLoaded() {
+         return LOADED;
+     }
+ 
++    public static boolean isDomumState(BlockState state) {
++        if (!LOADED || state == null) {
++            return false;
++        }
++        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
++        return id != null && VARIANT_TYPE.equals(id.getNamespace());
++    }
++
+     public static void beginSection(Mapper mapper, LevelChunk chunk, LevelChunkSection section, int sectionY) {
+-        if (!LOADED || mapper == null || chunk == null || section == null) {
+-            SECTION_MAPPED_BLOCK_IDS.remove();
++        if (!LOADED || mapper == null || chunk == null || section == null || chunk.getBlockEntities().isEmpty()) {
++            SECTION_IDS.remove();
+             return;
+         }
+ 
+@@ -54,24 +96,29 @@ public final class DomumOrnamentumCompat {
+         int minY = sectionY << 4;
+         int maxY = minY + 15;
+ 
+-        try {
+-            for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
+-                if (blockEntity == null || !isDomumBlockEntity(blockEntity)) {
+-                    continue;
+-                }
++        for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
++            if (blockEntity == null || !DOMUM_BLOCK_ENTITIES.get(blockEntity.getClass())) {
++                continue;
++            }
+ 
+-                BlockPos pos = blockEntity.getBlockPos();
+-                if (pos.getY() < minY || pos.getY() > maxY) {
+-                    continue;
+-                }
++            BlockPos pos = blockEntity.getBlockPos();
++            if (pos.getY() < minY || pos.getY() > maxY) {
++                continue;
++            }
+ 
++            try {
+                 ModelData modelData = blockEntity.getModelData();
+-                if (modelData == null || modelData == ModelData.EMPTY) {
++                Object textureData = extractTextureData(modelData);
++                if (textureData == null) {
++                    textureData = extractTextureData(blockEntity);
++                }
++                if (textureData == null) {
+                     continue;
+                 }
+ 
+-                Object variantKey = extractVariantKey(blockEntity, modelData);
+-                if (variantKey == null) {
++                VariantDescriptor descriptor = DESCRIPTORS.computeIfAbsent(textureData,
++                        DomumOrnamentumCompat::createDescriptor);
++                if (descriptor == null) {
+                     continue;
+                 }
+ 
+@@ -83,94 +130,129 @@ public final class DomumOrnamentumCompat {
+                     continue;
+                 }
+ 
+-                int mappedId = mapper.getIdForBlockStateVariant(state, variantKey);
+-                MODEL_DATA_BY_BLOCK_ID.putIfAbsent(mappedId, modelData);
++                int mappedId = mapper.getIdForBlockStateVariant(
++                        state, VARIANT_TYPE, descriptor.key(), descriptor.data());
++                plansFor(mapper).computeIfAbsent(mappedId,
++                        ignored -> createBakePlan(state, modelData, descriptor));
+ 
+                 if (mappedIds == null) {
+                     mappedIds = new int[4096];
+                 }
+-                int localIndex = lx | (lz << 4) | (ly << 8);
+-                mappedIds[localIndex] = mappedId;
++                mappedIds[lx | (lz << 4) | (ly << 8)] = mappedId;
++            } catch (Throwable ignored) {
+             }
+-        } catch (Throwable ignored) {
+-            mappedIds = null;
+         }
+ 
+         if (mappedIds == null) {
+-            SECTION_MAPPED_BLOCK_IDS.remove();
++            SECTION_IDS.remove();
+         } else {
+-            SECTION_MAPPED_BLOCK_IDS.set(mappedIds);
++            SECTION_IDS.set(mappedIds);
+         }
+     }
+ 
+     public static void endSection() {
+-        SECTION_MAPPED_BLOCK_IDS.remove();
++        SECTION_IDS.remove();
+     }
+ 
+     public static boolean hasSectionMappings() {
+-        if (!LOADED) {
+-            return false;
+-        }
+-        int[] mappedIds = SECTION_MAPPED_BLOCK_IDS.get();
+-        return mappedIds != null;
++        return LOADED && SECTION_IDS.get() != null;
+     }
+ 
+-    /**
+-     * Hot-path lookup used while converting 4096 voxels. For sections without
+-     * Domum material data this returns immediately. For sections with Domum data
+-     * it only checks whether the current local index was pre-resolved above.
+-     */
+     public static int mapBlockId(Mapper mapper, BlockState state, int baseBlockId, int localIndex) {
+         if (!LOADED || localIndex < 0 || localIndex >= 4096) {
+             return baseBlockId;
+         }
+-
+-        int[] mappedIds = SECTION_MAPPED_BLOCK_IDS.get();
++        int[] mappedIds = SECTION_IDS.get();
+         if (mappedIds == null) {
+             return baseBlockId;
+         }
+-
+         int mappedId = mappedIds[localIndex];
+         return mappedId == 0 ? baseBlockId : mappedId;
+     }
+ 
+-    public static ModelData getModelData(int blockId, BlockState state) {
+-        if (!LOADED) {
+-            return ModelData.EMPTY;
++    public static BakePlan getBakePlan(Mapper mapper, int blockId) {
++        if (!LOADED || mapper == null) {
++            return BakePlan.EMPTY;
+         }
+-        return MODEL_DATA_BY_BLOCK_ID.getOrDefault(blockId, ModelData.EMPTY);
++        Map<Integer, BakePlan> plans = BAKE_PLANS.get(mapper);
++        return plans == null ? BakePlan.EMPTY : plans.getOrDefault(blockId, BakePlan.EMPTY);
+     }
+ 
+-    /**
+-     * Backward-compatible fallback used by older call sites. Domum material data
+-     * is position-specific, not BlockState-specific, so this intentionally stays
+-     * empty.
+-     */
+-    public static ModelData getModelData(BlockState state) {
+-        return ModelData.EMPTY;
++    public static BlockState getColourState(Mapper mapper, int blockId, BlockState fallback) {
++        BakePlan plan = getBakePlan(mapper, blockId);
++        return plan.forceTint() ? null : plan.colourState() == null ? fallback : plan.colourState();
+     }
+ 
+-    private static boolean isDomumBlockEntity(BlockEntity blockEntity) {
+-        String name = blockEntity.getClass().getName();
+-        return name.startsWith(DOMUM_PACKAGE);
++    public static void restoreVariant(Mapper mapper, int blockId, BlockState state, String variantType, CompoundTag data) {
++        if (!LOADED || mapper == null || !VARIANT_TYPE.equals(variantType) || data == null || data.isEmpty()) {
++            return;
++        }
++        try {
++            Object textureData = deserializeTextureData(data);
++            if (textureData == null) {
++                return;
++            }
++            VariantDescriptor descriptor = DESCRIPTORS.computeIfAbsent(textureData,
++                    DomumOrnamentumCompat::createDescriptor);
++            if (descriptor == null) {
++                return;
++            }
++            ModelData modelData = createModelData(textureData);
++            plansFor(mapper).putIfAbsent(blockId, createBakePlan(state, modelData, descriptor));
++        } catch (Throwable ignored) {
++        }
+     }
+ 
+-    private static Object extractVariantKey(BlockEntity blockEntity, ModelData modelData) {
+-        Object textureData = extractTextureDataFromModelData(modelData);
+-        if (textureData != null) {
+-            return textureData;
++    private static BakePlan createBakePlan(BlockState state, ModelData modelData, VariantDescriptor descriptor) {
++        BlockState proxy = createStairProxy(state);
++        if (proxy != null && descriptor.tintAbgr() != -1) {
++            return new BakePlan(ModelData.EMPTY, proxy, null, descriptor.tintAbgr(), true);
+         }
++        ModelData resolved = modelData == null || modelData == ModelData.EMPTY
++                ? createModelDataFromDescriptor(descriptor)
++                : modelData;
++        return new BakePlan(resolved, null, descriptor.colourState(), descriptor.tintAbgr(), false);
++    }
+ 
+-        textureData = extractTextureDataFromBlockEntity(blockEntity);
+-        if (textureData != null) {
+-            return textureData;
++    private static ModelData createModelDataFromDescriptor(VariantDescriptor descriptor) {
++        try {
++            Object textureData = deserializeTextureData(descriptor.data());
++            return textureData == null ? ModelData.EMPTY : createModelData(textureData);
++        } catch (Throwable ignored) {
++            return ModelData.EMPTY;
+         }
++    }
+ 
+-        return null;
++    private static VariantDescriptor createDescriptor(Object textureData) {
++        try {
++            CompoundTag data = serializeTextureData(textureData);
++            if (data == null || data.isEmpty()) {
++                return null;
++            }
++            BlockState colourState = selectMaterialState(textureData);
++            return new VariantDescriptor(canonicalKey(data), data.copy(), colourState, resolveTint(colourState));
++        } catch (Throwable ignored) {
++            return null;
++        }
++    }
++
++    private static Object extractTextureData(BlockEntity blockEntity) {
++        Optional<Method> method = TEXTURE_DATA_METHODS.get(blockEntity.getClass());
++        if (method.isEmpty()) {
++            return null;
++        }
++        try {
++            return method.get().invoke(blockEntity);
++        } catch (ReflectiveOperationException ignored) {
++            return null;
++        }
+     }
+ 
+     @SuppressWarnings({"rawtypes", "unchecked"})
+-    private static Object extractTextureDataFromModelData(ModelData modelData) {
++    private static Object extractTextureData(ModelData modelData) {
++        if (modelData == null || modelData == ModelData.EMPTY) {
++            return null;
++        }
+         ModelProperty property = getMaterialTextureProperty();
+         if (property == null) {
+             return null;
+@@ -182,31 +264,174 @@ public final class DomumOrnamentumCompat {
+         }
+     }
+ 
+-    private static Object extractTextureDataFromBlockEntity(BlockEntity blockEntity) {
+-        Method method = getTextureDataMethod(blockEntity.getClass());
+-        if (method == null) {
+-            return null;
++    private static CompoundTag serializeTextureData(Object textureData) throws ReflectiveOperationException {
++        Object value = textureData.getClass().getMethod("serializeNBT").invoke(textureData);
++        return value instanceof CompoundTag tag ? tag : null;
++    }
++
++    private static Object deserializeTextureData(CompoundTag data) throws ReflectiveOperationException {
++        Class<?> type = Class.forName(TEXTURE_DATA_CLASS);
++        return type.getMethod("deserializeFromNBT", CompoundTag.class).invoke(null, data.copy());
++    }
++
++    @SuppressWarnings({"rawtypes", "unchecked"})
++    private static ModelData createModelData(Object textureData) {
++        ModelProperty property = getMaterialTextureProperty();
++        if (property == null || textureData == null) {
++            return ModelData.EMPTY;
+         }
+         try {
+-            return method.invoke(blockEntity);
++            Object builder = ModelData.class.getMethod("builder").invoke(null);
++            Method with = null;
++            for (Method method : builder.getClass().getMethods()) {
++                if (method.getName().equals("with") && method.getParameterCount() == 2) {
++                    with = method;
++                    break;
++                }
++            }
++            if (with == null) {
++                return ModelData.EMPTY;
++            }
++            with.invoke(builder, property, textureData);
++            Object result = builder.getClass().getMethod("build").invoke(builder);
++            return result instanceof ModelData data ? data : ModelData.EMPTY;
+         } catch (Throwable ignored) {
+-            return null;
++            return ModelData.EMPTY;
+         }
+     }
+ 
+-    private static Method getTextureDataMethod(Class<?> blockEntityClass) {
+-        Method method = getTextureDataMethod;
+-        if (method != null || getTextureDataMethodMissing) {
+-            return method;
++    private static BlockState selectMaterialState(Object textureData) {
++        try {
++            Object value = textureData.getClass().getMethod("getTexturedComponents").invoke(textureData);
++            if (!(value instanceof Map<?, ?> components) || components.isEmpty()) {
++                return null;
++            }
++
++            var entries = new ArrayList<>(components.entrySet());
++            entries.sort(Comparator
++                    .comparingInt((Map.Entry<?, ?> entry) -> materialPriority(String.valueOf(entry.getKey())))
++                    .thenComparing(entry -> String.valueOf(entry.getKey())));
++
++            for (Map.Entry<?, ?> entry : entries) {
++                if (entry.getValue() instanceof Block block && block != Blocks.AIR) {
++                    return block.defaultBlockState();
++                }
++            }
++        } catch (Throwable ignored) {
++        }
++        return null;
++    }
++
++    private static int materialPriority(String key) {
++        String normalized = key.toLowerCase();
++        if (normalized.contains("main") || normalized.contains("body") || normalized.contains("brick")
++                || normalized.contains("shingle") || normalized.contains("material")) {
++            return 0;
++        }
++        if (normalized.contains("frame") || normalized.contains("pillar") || normalized.contains("support")) {
++            return 2;
++        }
++        return 1;
++    }
++
++    private static int resolveTint(BlockState materialState) {
++        if (materialState == null) {
++            return -1;
++        }
++        try {
++            int colour = net.minecraft.client.Minecraft.getInstance().getBlockColors()
++                    .getColor(materialState, null, BlockPos.ZERO, 0);
++            if (colour != -1) {
++                return rgbToAbgr(colour);
++            }
++        } catch (Throwable ignored) {
+         }
+         try {
+-            method = blockEntityClass.getMethod("getTextureData");
+-            getTextureDataMethod = method;
+-            return method;
++            int colour = materialState.getMapColor(null, BlockPos.ZERO).col;
++            return rgbToAbgr(colour);
+         } catch (Throwable ignored) {
+-            getTextureDataMethodMissing = true;
++            return -1;
++        }
++    }
++
++    private static BlockState createStairProxy(BlockState state) {
++        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
++        if (id == null || !VARIANT_TYPE.equals(id.getNamespace())) {
+             return null;
+         }
++        String path = id.getPath();
++        if (!(path.contains("stair") || path.contains("shingle"))
++                || !state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)
++                || !state.hasProperty(BlockStateProperties.HALF)) {
++            return null;
++        }
++
++        BlockState proxy = Blocks.QUARTZ_STAIRS.defaultBlockState()
++                .setValue(BlockStateProperties.HORIZONTAL_FACING, state.getValue(BlockStateProperties.HORIZONTAL_FACING))
++                .setValue(BlockStateProperties.HALF, state.getValue(BlockStateProperties.HALF));
++        if (state.hasProperty(BlockStateProperties.STAIRS_SHAPE)) {
++            proxy = proxy.setValue(BlockStateProperties.STAIRS_SHAPE, state.getValue(BlockStateProperties.STAIRS_SHAPE));
++        }
++        if (state.hasProperty(BlockStateProperties.WATERLOGGED)) {
++            proxy = proxy.setValue(BlockStateProperties.WATERLOGGED, state.getValue(BlockStateProperties.WATERLOGGED));
++        }
++        return proxy;
++    }
++
++    private static String canonicalKey(CompoundTag data) {
++        StringBuilder canonical = new StringBuilder(128);
++        appendCanonical(data, canonical);
++        try {
++            byte[] digest = MessageDigest.getInstance("SHA-256")
++                    .digest(canonical.toString().getBytes(StandardCharsets.UTF_8));
++            return HexFormat.of().formatHex(digest);
++        } catch (NoSuchAlgorithmException impossible) {
++            throw new IllegalStateException("SHA-256 is unavailable", impossible);
++        }
++    }
++
++    private static void appendCanonical(Tag tag, StringBuilder output) {
++        output.append(tag.getId()).append(':');
++        if (tag instanceof CompoundTag compound) {
++            var keys = new ArrayList<>(compound.getAllKeys());
++            keys.sort(String::compareTo);
++            output.append('{');
++            for (String key : keys) {
++                output.append(key.length()).append(':').append(key).append('=');
++                Tag value = compound.get(key);
++                if (value != null) {
++                    appendCanonical(value, output);
++                }
++                output.append(';');
++            }
++            output.append('}');
++            return;
++        }
++        if (tag instanceof ListTag list) {
++            output.append('[');
++            for (int index = 0; index < list.size(); index++) {
++                appendCanonical(list.get(index), output);
++                output.append(';');
++            }
++            output.append(']');
++            return;
++        }
++        String value = tag.toString();
++        output.append(value.length()).append(':').append(value);
++    }
++
++    private static Map<Integer, BakePlan> plansFor(Mapper mapper) {
++        return BAKE_PLANS.computeIfAbsent(mapper, ignored -> new ConcurrentHashMap<>());
++    }
++
++    public static void closeMapper(Mapper mapper) {
++        if (LOADED && mapper != null) {
++            BAKE_PLANS.remove(mapper);
++        }
++    }
++
++    private static int rgbToAbgr(int rgb) {
++        return 0xFF000000 | ((rgb & 0x0000FF) << 16) | (rgb & 0x00FF00) | ((rgb >>> 16) & 0xFF);
+     }
+ 
+     private static ModelProperty<?> getMaterialTextureProperty() {
+@@ -215,7 +440,7 @@ public final class DomumOrnamentumCompat {
+             return property;
+         }
+         try {
+-            Class<?> propertiesClass = Class.forName(DOMUM_MODEL_PROPERTIES);
++            Class<?> propertiesClass = Class.forName(MODEL_PROPERTIES);
+             Field field = propertiesClass.getField("MATERIAL_TEXTURE_PROPERTY");
+             Object value = field.get(null);
+             if (value instanceof ModelProperty<?> modelProperty) {

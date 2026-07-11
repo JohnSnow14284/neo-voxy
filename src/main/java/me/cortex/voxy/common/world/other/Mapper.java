@@ -4,6 +4,7 @@ import com.mojang.serialization.Dynamic;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.config.IMappingStorage;
+import me.cortex.voxy.commonImpl.compat.DomumOrnamentumCompat;
 import me.cortex.voxy.common.world.other.Mapper.BiomeEntry;
 import me.cortex.voxy.common.world.other.Mapper.StateEntry;
 import net.minecraft.SharedConstants;
@@ -61,7 +62,7 @@ public class Mapper {
     private Consumer<StateEntry> newStateCallback;
     private Consumer<BiomeEntry> newBiomeCallback;
 
-    private record VariantStateKey(BlockState state, Object variantKey) { }
+    private record VariantStateKey(BlockState state, String variantType, String variantKey) { }
 
     public Mapper(IMappingStorage storage) {
         this.storage = storage;
@@ -140,9 +141,18 @@ public class Mapper {
                     continue;
                 }
 
+                if (sentry.isVariant()) {
+                    this.variantBlock2stateEntry.putIfAbsent(
+                            new VariantStateKey(sentry.state, sentry.variantType, sentry.variantKey), sentry);
+                    DomumOrnamentumCompat.restoreVariant(
+                            this, sentry.id, sentry.state, sentry.variantType, sentry.variantData);
+                    continue;
+                }
+
                 var oldEntry = this.block2stateEntry.putIfAbsent(sentry.state, sentry);
-                if (oldEntry != null) {
-                    Logger.warn("Multiple mappings for blockstate, using old state, expect things to possibly go really badly. " + oldEntry.id + ":" + sentry.id + ":" + sentry.state );
+                if (oldEntry != null && !DomumOrnamentumCompat.isDomumState(sentry.state)) {
+                    Logger.warn("Multiple mappings for blockstate " + sentry.state + ": "
+                            + oldEntry.id + " and " + sentry.id);
                 }
             } else if (entryType == BIOME_TYPE) {
                 var bentry = BiomeEntry.deserialize(id, entry.getValue());
@@ -193,16 +203,21 @@ public class Mapper {
         this.block2stateEntry.put(state, entry);
         this.blockLock.unlock();
 
-        byte[] serialized = entry.serialize();
-        ByteBuffer buffer = MemoryUtil.memAlloc(serialized.length);
-        buffer.put(serialized);
-        buffer.rewind();
-        this.storage.putIdMapping(entry.id | (BLOCK_STATE_TYPE<<30), buffer);
-        MemoryUtil.memFree(buffer);
-        //this.storage.flush();
+        this.persistStateEntry(entry);
 
         if (this.newStateCallback!=null)this.newStateCallback.accept(entry);
         return entry;
+    }
+
+    private void persistStateEntry(StateEntry entry) {
+        byte[] serialized = entry.serialize();
+        ByteBuffer buffer = MemoryUtil.memAlloc(serialized.length);
+        try {
+            buffer.put(serialized).rewind();
+            this.storage.putIdMapping(entry.id | (BLOCK_STATE_TYPE << 30), buffer);
+        } finally {
+            MemoryUtil.memFree(buffer);
+        }
     }
 
     private BiomeEntry registerNewBiome(String biome) {
@@ -251,21 +266,16 @@ public class Mapper {
         return mapping.id;
     }
 
-    /**
-     * Registers a virtual block-state id that uses the same BlockState for all
-     * vanilla metadata, but must be baked as a distinct client model. This is
-     * used for block-entity-driven model data such as Domum Ornamentum material
-     * variants. The default BlockState mapping is intentionally left unchanged.
-     */
-    public int getIdForBlockStateVariant(BlockState state, Object variantKey) {
+    public int getIdForBlockStateVariant(BlockState state, String variantType,
+                                             String variantKey, CompoundTag variantData) {
         if (state.isAir()) {
             return 0;
         }
-        if (variantKey == null) {
+        if (variantKey == null || variantKey.isEmpty()) {
             return this.getIdForBlockState(state);
         }
 
-        var key = new VariantStateKey(state, variantKey);
+        var key = new VariantStateKey(state, variantType, variantKey);
         var mapping = this.variantBlock2stateEntry.get(key);
         if (mapping != null) {
             return mapping.id;
@@ -278,20 +288,15 @@ public class Mapper {
                 return mapping.id;
             }
 
-            mapping = new StateEntry(this.blockId2stateEntry.size(), state);
+            mapping = new StateEntry(this.blockId2stateEntry.size(), state,
+                    variantType, variantKey, variantData);
             this.blockId2stateEntry.add(mapping);
             this.variantBlock2stateEntry.put(key, mapping);
         } finally {
             this.blockLock.unlock();
         }
 
-        byte[] serialized = mapping.serialize();
-        ByteBuffer buffer = MemoryUtil.memAlloc(serialized.length);
-        buffer.put(serialized);
-        buffer.rewind();
-        this.storage.putIdMapping(mapping.id | (BLOCK_STATE_TYPE<<30), buffer);
-        MemoryUtil.memFree(buffer);
-
+        this.persistStateEntry(mapping);
         if (this.newStateCallback != null) {
             this.newStateCallback.accept(mapping);
         }
@@ -355,7 +360,7 @@ public class Mapper {
     }
 
     public void forceResaveStates() {
-        var blocks = new ArrayList<>(this.block2stateEntry.values());
+        var blocks = new ArrayList<>(this.blockId2stateEntry);
         var biomes = new ArrayList<>(this.biome2biomeEntry.values());
 
 
@@ -366,12 +371,7 @@ public class Mapper {
             if (this.blockId2stateEntry.indexOf(entry) != entry.id) {
                 throw new IllegalStateException("State Id NOT THE SAME, very critically bad. arr:" + this.blockId2stateEntry.indexOf(entry) + " entry: " + entry.id);
             }
-            byte[] serialized = entry.serialize();
-            ByteBuffer buffer = MemoryUtil.memAlloc(serialized.length);
-            buffer.put(serialized);
-            buffer.rewind();
-            this.storage.putIdMapping(entry.id | (BLOCK_STATE_TYPE<<30), buffer);
-            MemoryUtil.memFree(buffer);
+            this.persistStateEntry(entry);
         }
 
         for (var entry : biomes) {
@@ -391,7 +391,7 @@ public class Mapper {
     }
 
     public void close() {
-
+        DomumOrnamentumCompat.closeMapper(this);
     }
 
 
@@ -399,9 +399,21 @@ public class Mapper {
         public final int id;
         public final BlockState state;
         public final int opacity;
+        public final String variantType;
+        public final String variantKey;
+        public final CompoundTag variantData;
+
         public StateEntry(int id, BlockState state) {
+            this(id, state, null, null, null);
+        }
+
+        public StateEntry(int id, BlockState state, String variantType,
+                          String variantKey, CompoundTag variantData) {
             this.id = id;
             this.state = state;
+            this.variantType = variantType;
+            this.variantKey = variantKey;
+            this.variantData = variantData == null ? null : variantData.copy();
             //Override opacity of leaves to be solid
             if (state.getBlock() instanceof LeavesBlock) {
                 this.opacity = 15;
@@ -437,11 +449,22 @@ public class Mapper {
             }
         }
 
+        public boolean isVariant() {
+            return this.variantType != null && this.variantKey != null;
+        }
+
         public byte[] serialize() {
             try {
                 var serialized = new CompoundTag();
                 serialized.putInt("id", this.id);
                 serialized.put("block_state", BlockState.CODEC.encodeStart(NbtOps.INSTANCE, this.state).result().get());
+                if (this.isVariant()) {
+                    serialized.putString("variant_type", this.variantType);
+                    serialized.putString("variant_key", this.variantKey);
+                    if (this.variantData != null) {
+                        serialized.put("variant_data", this.variantData.copy());
+                    }
+                }
                 var out = new ByteArrayOutputStream();
                 NbtIo.writeCompressed(serialized, out);
                 return out.toByteArray();
@@ -468,9 +491,14 @@ public class Mapper {
                 }
 
                 var encodedState = compound.getCompound("block_state");
+                String variantType = compound.contains("variant_type") ? compound.getString("variant_type") : null;
+                String variantKey = compound.contains("variant_key") ? compound.getString("variant_key") : null;
+                CompoundTag variantData = compound.contains("variant_data")
+                        ? compound.getCompound("variant_data") : null;
+
                 var decoded = BlockState.CODEC.parse(NbtOps.INSTANCE, encodedState);
                 if (!decoded.isError()) {
-                    return new StateEntry(id, decoded.getOrThrow());
+                    return new StateEntry(id, decoded.getOrThrow(), variantType, variantKey, variantData);
                 }
 
                 Logger.info("Stored block state needs data fixing: " + decoded.error().get().message());
@@ -491,7 +519,7 @@ public class Mapper {
 
                 forceResave[0] = true;
                 Logger.info("Updated stored block state to: " + decoded.getOrThrow());
-                return new StateEntry(id, decoded.getOrThrow());
+                return new StateEntry(id, decoded.getOrThrow(), variantType, variantKey, variantData);
             } catch (IOException readFailure) {
                 return airReplacement(id, forceResave, "Unable to read a stored block state", readFailure);
             } catch (RuntimeException decodeFailure) {

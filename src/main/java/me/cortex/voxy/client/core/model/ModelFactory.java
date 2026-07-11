@@ -1,5 +1,6 @@
 package me.cortex.voxy.client.core.model;
 
+import me.cortex.voxy.commonImpl.compat.DomumOrnamentumCompat;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
@@ -135,7 +136,7 @@ public class ModelFactory {
     public ModelFactory(Mapper mapper, ModelStore storage) {
         this.mapper = mapper;
         this.storage = storage;
-        this.bakery2 = new SoftwareModelTextureBakery();
+        this.bakery2 = new SoftwareModelTextureBakery(mapper);
         this.bakery2.setupTexture();
 
         this.metadataCache = new long[1<<16];
@@ -267,9 +268,7 @@ public class ModelFactory {
         }
 
 
-        boolean centeredGroundCross = (flags & SoftwareModelTextureBakery.FLAG_CENTERED_GROUND_CROSS) != 0;
-        var bakeResult = this.processTextureBakeResult(
-                bake.blockId, bake.state, textureData, isShaded, hasDarkenedTextures, layer, centeredGroundCross);
+        var bakeResult = this.processTextureBakeResult(bake.blockId, bake.state, textureData, isShaded, hasDarkenedTextures, layer);
         if (bakeResult!=null) {
             this.uploadResults.add(bakeResult);
         }
@@ -364,7 +363,7 @@ public class ModelFactory {
         }
     }
 
-    private ModelBakeResultUpload processTextureBakeResult(int blockId, BlockState blockState, ColourDepthTextureData[] textureData, boolean isShaded, boolean darkenedTinting, RenderType layer, boolean centeredGroundCross) {
+    private ModelBakeResultUpload processTextureBakeResult(int blockId, BlockState blockState, ColourDepthTextureData[] textureData, boolean isShaded, boolean darkenedTinting, RenderType layer) {
         if (this.idMappings[blockId] != -1) {
             //This should be impossible to reach as it means that multiple bakes for the same blockId happened and where inflight at the same time!
             throw new IllegalStateException("Block id already added: " + blockId + " for state: " + blockState);
@@ -397,16 +396,17 @@ public class ModelFactory {
             }
         }
 
-        var colourProvider = getColourProvider(blockState);
+        BlockState colourState = DomumOrnamentumCompat.getColourState(this.mapper, blockId, blockState);
+        var colourProvider = colourState == null ? null : getColourProvider(colourState);
 
         boolean isBiomeColourDependent = false;
         if (colourProvider != null) {
-            isBiomeColourDependent = isBiomeDependentColour(colourProvider, blockState);
+            isBiomeColourDependent = isBiomeDependentColour(colourProvider, colourState);
         }
 
         ModelEntry entry;
         {//Deduplicate same entries
-            entry = new ModelEntry(textureData, clientFluidStateId, isBiomeColourDependent||colourProvider==null?-1:captureColourConstant(colourProvider, blockState, DEFAULT_BIOME)|0xFF000000);
+            entry = new ModelEntry(textureData, clientFluidStateId, isBiomeColourDependent||colourProvider==null?-1:captureColourConstant(colourProvider, colourState, DEFAULT_BIOME)|0xFF000000);
             int possibleDuplicate = this.modelTexture2id.getInt(entry);
             if (possibleDuplicate != -1) {//Duplicate found
                 this.idMappings[blockId] = possibleDuplicate;
@@ -459,18 +459,6 @@ public class ModelFactory {
         // since that would help alot with perf of lots of vines, can be done by having one of the faces just not exist and the other be in no occlusion mode
 
         var depths = computeModelDepth(textureData, checkMode, layer!=RenderType.solid()?TextureUtils.DEPTH_MODE_MIN:TextureUtils.DEPTH_MODE_AVG);
-
-        if (centeredGroundCross) {
-            // The texture baker projects a crossed plant onto all four side faces. Keeping
-            // the measured outer depths turns those projections into a four-wall box. Move
-            // only the visible side projections to the cell centre, yielding two crossed
-            // double-sided cards while leaving crops, vines and lily pads on their normal path.
-            for (int face = 2; face < 6; face++) {
-                if (depths[face] > -0.1f) {
-                    depths[face] = 0.5f;
-                }
-            }
-        }
 
         //TODO: THIS, note this can be tested for in 2 ways, re render the model with quad culling disabled and see if the result
         // is the same, (if yes then needs double sided quads)
@@ -642,12 +630,12 @@ public class ModelFactory {
             //Populate the list of biomes for the model state
             int biomeIndex = this.modelsRequiringBiomeColours.size() * this.biomes.size();
             MemoryUtil.memPutInt(uploadPtr, biomeIndex);
-            this.modelsRequiringBiomeColours.add(new Pair<>(modelId, blockState));
+            this.modelsRequiringBiomeColours.add(new Pair<>(modelId, colourState));
             if (!this.biomes.isEmpty()) {
                 uploadResult.biomeUploadIndex = biomeIndex;
                 long clrUploadPtr = (uploadResult.biomeUpload = new MemoryBuffer(4L * this.biomes.size())).address;
                 for (var biome : this.biomes) {
-                    MemoryUtil.memPutInt(clrUploadPtr, captureColourConstant(colourProvider, blockState, biome) | 0xFF000000); clrUploadPtr += 4;
+                    MemoryUtil.memPutInt(clrUploadPtr, captureColourConstant(colourProvider, colourState, biome) | 0xFF000000); clrUploadPtr += 4;
                 }
             }
         }

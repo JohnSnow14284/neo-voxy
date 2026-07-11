@@ -24,6 +24,8 @@ public final class ReuseVertexConsumer implements VertexConsumer {
     private int count;
     private int defaultMeta;
     private boolean vertexAlphaOnly;
+    private int fallbackTintColour = -1;
+    private int forcedTintColour = -1;
 
     public boolean anyShaded;
     public boolean anyDarkendTex;
@@ -51,6 +53,17 @@ public final class ReuseVertexConsumer implements VertexConsumer {
         this.vertexAlphaOnly = vertexAlphaOnly;
         return this;
     }
+
+    public ReuseVertexConsumer setFallbackTintColour(int colour) {
+        this.fallbackTintColour = colour;
+        return this;
+    }
+
+    public ReuseVertexConsumer setForcedTintColour(int colour) {
+        this.forcedTintColour = colour;
+        return this;
+    }
+
 
     @Override
     public ReuseVertexConsumer addVertex(float x, float y, float z) {
@@ -119,11 +132,15 @@ public final class ReuseVertexConsumer implements VertexConsumer {
         int meta = 0;
         meta |= shouldEnableAlphaDiscard(quad, forceSolid, layer) ? 1 : 0;//has discard
 
-        int tintColour = -1;
-        if (quad.isTinted()) {
-            tintColour = captureTintColour(state, quad.getTintIndex());
+        int tintColour = this.forcedTintColour;
+        if (tintColour == -1 && quad.isTinted()) {
+            int tintIndex = quad.getTintIndex();
+            tintColour = captureTintColour(state, tintIndex);
+            if (tintColour == -1 && tintIndex > 0xFF) {
+                tintColour = this.fallbackTintColour;
+            }
             if (tintColour == -1) {
-                meta |= 4;//has tinting, keep Voxy's normal biome/constant tint path
+                meta |= 4;
             }
         }
         return this.quad(quad, meta, tintColour);
@@ -386,6 +403,8 @@ public final class ReuseVertexConsumer implements VertexConsumer {
         this.anyDiscard = false;
         this.defaultMeta = 0;//RESET THE DEFAULT META
         this.vertexAlphaOnly = false;
+        this.fallbackTintColour = -1;
+        this.forcedTintColour = -1;
         this.count = 0;
         this.ptr = this.buffer.address - VERTEX_FORMAT_SIZE;//the thing is first time this gets incremented by FORMAT_STRIDE
         return this;
