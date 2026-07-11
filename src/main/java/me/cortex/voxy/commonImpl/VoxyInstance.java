@@ -13,6 +13,7 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
@@ -214,63 +215,75 @@ public abstract class VoxyInstance {
         debug.add("I/S/AWSC: " + this.ingestService.getTaskCount() + "/" + this.savingService.getTaskCount() + "/[" + this.activeWorlds.values().stream().map(a->""+a.getActiveSectionCount()).collect(Collectors.joining(", ")) + "]");//Active world section count
     }
 
+    private List<WorldEngine> snapshotWorlds() {
+        long stamp = this.activeWorldLock.readLock();
+        try {
+            return new ArrayList<>(this.activeWorlds.values());
+        } finally {
+            this.activeWorldLock.unlockRead(stamp);
+        }
+    }
+
+    private void awaitWorldQuiescence(List<WorldEngine> worlds) {
+        long nextReport = System.nanoTime() + 2_000_000_000L;
+        while (true) {
+            int busyWorlds = 0;
+            int loadedSections = 0;
+            for (var world : worlds) {
+                if (world.isLive() && world.isWorldUsed()) {
+                    busyWorlds++;
+                    loadedSections += world.getActiveSectionCount();
+                }
+            }
+            if (busyWorlds == 0) return;
+
+            long now = System.nanoTime();
+            if (now >= nextReport) {
+                Logger.warn("Waiting for " + busyWorlds + " Voxy world engine(s) to release; loaded sections: " + loadedSections);
+                nextReport = now + 2_000_000_000L;
+            }
+            //No monitor is held here. Save workers and section-release callbacks remain free to drain.
+            LockSupport.parkNanos(1_000_000L);
+        }
+    }
+
     public void shutdown() {
         Logger.info("Shutting down voxy instance");
         this.isRunning = false;
+        this.worldCleaner.interrupt();
         try {
             this.worldCleaner.join();
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            Thread.currentThread().interrupt();
+            Logger.error("Interrupted while stopping the Voxy world cleaner", e);
         }
+
         this.cleanIdle();
-
-        if (!this.activeWorlds.isEmpty()) {
-            long stamp = this.activeWorldLock.readLock();
-            for (var world : this.activeWorlds.values()) {
-                this.importManager.cancelImport(world);
-            }
-            this.activeWorldLock.unlockRead(stamp);
+        var worlds = this.snapshotWorlds();
+        for (var world : worlds) {
+            this.importManager.cancelImport(world);
         }
 
+        //Stop producers first. The saving service deliberately remains alive while the final
+        //section references disappear, because section unload is what queues the last writes.
         try {this.ingestService.shutdown();} catch (Exception e) {Logger.error(e);}
+        this.awaitWorldQuiescence(worlds);
         try {this.savingService.shutdown();} catch (Exception e) {Logger.error(e);}
 
-
         long stamp = this.activeWorldLock.writeLock();
-
-        if (!this.activeWorlds.isEmpty()) {
-            boolean printedNotice = false;
-            for (var world : new ArrayList<>(this.activeWorlds.values())) {
-                if (world.isWorldUsed()) {
-                    if (!printedNotice) {
-                        printedNotice = true;
-                        Logger.error("Not all worlds shutdown, force closing worlds");
-                    }
-                    //Dont lock in the loopy thing, this should basicly never happen if it does something horrific happened
-                    this.activeWorldLock.unlockWrite(stamp);
-                    while (world.isWorldUsed()) {
-                        try {
-                            //noinspection BusyWait
-                            Thread.sleep(10);
-                        } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
-                        }
-                    }
-                    stamp = this.activeWorldLock.writeLock();
-                }
-                //Free the world
-                world.free();
+        try {
+            for (var entry : this.activeWorlds.entrySet()) {
+                entry.getKey().cachedEngineObject = null;
+                var world = entry.getValue();
+                if (world.isLive()) world.free();
             }
             this.activeWorlds.clear();
+        } finally {
+            this.activeWorldLock.unlockWrite(stamp);
         }
 
         try {this.threadPool.shutdown();} catch (Exception e) {Logger.error(e);}
-
-        if (!this.activeWorlds.isEmpty()) {
-            throw new IllegalStateException("Not all worlds shutdown");
-        }
         Logger.info("Instance shutdown");
-        this.activeWorldLock.unlockWrite(stamp);
     }
 
     public boolean isIngestEnabled(WorldIdentifier worldId) {

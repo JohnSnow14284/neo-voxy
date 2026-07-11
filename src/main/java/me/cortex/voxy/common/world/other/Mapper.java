@@ -4,7 +4,6 @@ import com.mojang.serialization.Dynamic;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.config.IMappingStorage;
-import me.cortex.voxy.common.util.Pair;
 import me.cortex.voxy.common.world.other.Mapper.BiomeEntry;
 import me.cortex.voxy.common.world.other.Mapper.StateEntry;
 import net.minecraft.SharedConstants;
@@ -34,7 +33,6 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
@@ -121,7 +119,6 @@ public class Mapper {
         var mappings = this.storage.getIdMappingsData();
         List<StateEntry> sentries = new ArrayList<>();
         List<BiomeEntry> bentries = new ArrayList<>();
-        List<Pair<byte[], Integer>> sentryErrors = new ArrayList<>();
 
         boolean[] forceResave = new boolean[1];
         for (var entry : mappings.int2ObjectEntrySet()) {
@@ -129,15 +126,22 @@ public class Mapper {
             int id = entry.getIntKey() & ((1<<30)-1);
             if (entryType == BLOCK_STATE_TYPE) {
                 var sentry = StateEntry.deserialize(id, entry.getValue(), forceResave);
-                if (sentry.state.isAir()) {
-                    Logger.error("Deserialization was air, removed block");
-                    sentryErrors.add(new Pair<>(entry.getValue(), id));
+                if (id == 0) {
+                    //The canonical air entry is created before storage is read.
                     continue;
                 }
+
                 sentries.add(sentry);
+                if (sentry.state.isAir()) {
+                    //Keep the numeric mapping slot so old voxel data remains valid, but do not
+                    //replace a removed mod block with an unrelated random registry entry.
+                    forceResave[0] = true;
+                    Logger.warn("Stored block-state mapping " + id + " is unavailable and will render as air");
+                    continue;
+                }
+
                 var oldEntry = this.block2stateEntry.putIfAbsent(sentry.state, sentry);
                 if (oldEntry != null) {
-                    //forceResave[0] |= true;
                     Logger.warn("Multiple mappings for blockstate, using old state, expect things to possibly go really badly. " + oldEntry.id + ":" + sentry.id + ":" + sentry.state );
                 }
             } else if (entryType == BIOME_TYPE) {
@@ -148,21 +152,6 @@ public class Mapper {
                 }
             } else {
                 throw new IllegalStateException("Unknown entryType");
-            }
-        }
-
-        if (!sentryErrors.isEmpty()) {
-            forceResave[0] |= true;
-            //Insert garbage types into the mapping for those blocks, TODO:FIXME: Need to upgrade the type or have a solution to error blocks
-            var rand = new Random();
-            for (var error : sentryErrors) {
-                while (true) {
-                    var state = new StateEntry(error.right(), Block.BLOCK_STATE_REGISTRY.byId(rand.nextInt(Block.BLOCK_STATE_REGISTRY.size() - 1)));
-                    if (this.block2stateEntry.put(state.state, state) == null) {
-                        sentries.add(state);
-                        break;
-                    }
-                }
             }
         }
 
@@ -461,31 +450,52 @@ public class Mapper {
             }
         }
 
+        private static StateEntry airReplacement(int id, boolean[] forceResave, String message, Throwable cause) {
+            forceResave[0] = true;
+            if (cause == null) {
+                Logger.warn(message + "; mapping id " + id + " will use air");
+            } else {
+                Logger.error(message + "; mapping id " + id + " will use air", cause);
+            }
+            return new StateEntry(id, Blocks.AIR.defaultBlockState());
+        }
+
         public static StateEntry deserialize(int id, byte[] data, boolean[] forceResave) {
             try {
                 var compound = NbtIo.readCompressed(new ByteArrayInputStream(data), NbtAccounter.unlimitedHeap());
                 if (compound.getInt("id") != id) {
-                    throw new IllegalStateException("Encoded id != expected id");
+                    return airReplacement(id, forceResave, "Stored block-state id does not match its mapping key", null);
                 }
-                var bsc = compound.getCompound("block_state");
-                var state = BlockState.CODEC.parse(NbtOps.INSTANCE, bsc);
-                if (state.isError()) {
-                    Logger.info("Could not decode blockstate, attempting fixes, error: "+ state.error().get().message());
-                    bsc = (CompoundTag) DataFixers.getDataFixer().update(References.BLOCK_STATE, new Dynamic<>(NbtOps.INSTANCE,bsc),0, SharedConstants.getCurrentVersion().getDataVersion().getVersion()).getValue();
-                    state = BlockState.CODEC.parse(NbtOps.INSTANCE, bsc);
-                    if (state.isError()) {
-                        Logger.error("Could not decode blockstate setting to air. id:" + id + " error: " + state.error().get().message());
-                        return new StateEntry(id, Blocks.AIR.defaultBlockState());
-                    } else {
-                        Logger.info("Fixed blockstate to: " + state.getOrThrow());
-                        forceResave[0] |= true;
-                        return new StateEntry(id, state.getOrThrow());
-                    }
-                } else {
-                    return new StateEntry(id, state.getOrThrow());
+
+                var encodedState = compound.getCompound("block_state");
+                var decoded = BlockState.CODEC.parse(NbtOps.INSTANCE, encodedState);
+                if (!decoded.isError()) {
+                    return new StateEntry(id, decoded.getOrThrow());
                 }
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+
+                Logger.info("Stored block state needs data fixing: " + decoded.error().get().message());
+                try {
+                    var upgraded = DataFixers.getDataFixer().update(
+                            References.BLOCK_STATE,
+                            new Dynamic<>(NbtOps.INSTANCE, encodedState),
+                            0,
+                            SharedConstants.getCurrentVersion().getDataVersion().getVersion()).getValue();
+                    decoded = BlockState.CODEC.parse(NbtOps.INSTANCE, upgraded);
+                } catch (RuntimeException fixerFailure) {
+                    return airReplacement(id, forceResave, "Unable to upgrade a stored block state (the source mod may be absent)", fixerFailure);
+                }
+
+                if (decoded.isError()) {
+                    return airReplacement(id, forceResave, "Unable to decode a stored block state after data fixing", null);
+                }
+
+                forceResave[0] = true;
+                Logger.info("Updated stored block state to: " + decoded.getOrThrow());
+                return new StateEntry(id, decoded.getOrThrow());
+            } catch (IOException readFailure) {
+                return airReplacement(id, forceResave, "Unable to read a stored block state", readFailure);
+            } catch (RuntimeException decodeFailure) {
+                return airReplacement(id, forceResave, "Unexpected error while reading a stored block state", decodeFailure);
             }
         }
     }

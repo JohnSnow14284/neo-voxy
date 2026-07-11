@@ -115,10 +115,22 @@ uvec3 makeRemainingAttributes(const in BlockModel model, const in Quad quad, uin
     return attributes;
 }
 
+float resolveFluidTopIndentation(BlockModel model, uint face, float bakedIndentation, float localY, float lodScale, ivec3 lodPos, uint lodLevel) {
+    if (lodLevel == 0u || face != 1u || !modelUsesFluidDatum(model)) return bakedIndentation;
+
+    float coarseBottom = localY * lodScale + float((lodPos.y << lodLevel) << 5);
+    float datumPosition = (fluidDatumY - coarseBottom) / lodScale;
+    if (datumPosition <= 0.0 || datumPosition > 1.0) return bakedIndentation;
+
+    //UP faces use 1-indentation. Keep the result within the face-data encoding range.
+    return clamp(1.0 - datumPosition, 0.0, 62.0 / 64.0);
+}
+
 void setupQuad(out QuadData quad, const in Quad rawQuad, uvec2 sPos, bool generateAttributes) {
     uint lodLevel = getLoDLevel(sPos);
     float lodScale = 1<<lodLevel;
-    ivec3 baseSection = (getLoDPosition(sPos)<<lodLevel) - baseSectionPos;
+    ivec3 lodPos = getLoDPosition(sPos);
+    ivec3 baseSection = (lodPos<<lodLevel) - baseSectionPos;
 
     uint face = extractFace(rawQuad);
     uint modelId = extractStateId(rawQuad);
@@ -136,7 +148,8 @@ void setupQuad(out QuadData quad, const in Quad rawQuad, uvec2 sPos, bool genera
     faceSize *= 2;
     #endif
     vec3 quadStart = extractPos(rawQuad);
-    float depthOffset = extractFaceIndentation(faceData);
+    float depthOffset = resolveFluidTopIndentation(
+            model, face, extractFaceIndentation(faceData), quadStart.y, lodScale, lodPos, lodLevel);
     quadStart += swizzelDataAxis(face>>1, vec3(faceSize.xz, mix(depthOffset, 1-depthOffset, float(face&1u))));
 
     quad.lodScale = lodScale;
