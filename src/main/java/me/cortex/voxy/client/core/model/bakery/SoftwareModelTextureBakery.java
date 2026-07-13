@@ -413,7 +413,9 @@ public class SoftwareModelTextureBakery {
                 this.rasterizer.clear();
                 this.rasterizer.setBlending(false);
                 this.rasterizer.raster(VIEWS[i], this.opaqueVC);
-                this.rasterizer.setBlending(true);
+                // Duplicate opposite-winding liquid quads must not accumulate alpha in the
+                // baked texture. Replace the translucent sample to keep straight-alpha data.
+                this.rasterizer.setBlending(true, true);
                 this.rasterizer.raster(VIEWS[i], this.translucentVC);
                 UnsafeUtil.memcpy(this.rasterizer.getRawFramebuffer(), outputBuffer + (SINGLE_FACE_OUTPUT_SIZE * i));
             }

@@ -11,6 +11,7 @@ import me.cortex.voxy.client.core.rendering.hierachical.NodeCleaner;
 import me.cortex.voxy.client.core.rendering.post.FullscreenBlit;
 import me.cortex.voxy.client.core.util.GPUTiming;
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.level.material.FogType;
 import org.joml.Matrix4f;
 
 import java.util.List;
@@ -23,6 +24,7 @@ import static org.lwjgl.opengl.GL11C.GL_NEAREST;
 import static org.lwjgl.opengl.GL11C.GL_ONE;
 import static org.lwjgl.opengl.GL11C.GL_ONE_MINUS_SRC_ALPHA;
 import static org.lwjgl.opengl.GL11C.GL_RGBA8;
+import static org.lwjgl.opengl.GL11C.GL_SRC_ALPHA;
 import static org.lwjgl.opengl.GL11C.GL_STENCIL_TEST;
 import static org.lwjgl.opengl.GL11C.GL_TEXTURE_MAG_FILTER;
 import static org.lwjgl.opengl.GL11C.GL_TEXTURE_MIN_FILTER;
@@ -52,8 +54,7 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
         super(properties, nodeManager, nodeCleaner, traversal, frexSupplier, false);
         this.finalBlit = new FullscreenBlit(properties, "voxy:post/blit_texture_depth_cutout.frag",
                 a -> a.define("USE_ENV_FOG")
-                        .define("EMIT_COLOUR")
-                        .define("PREMULTIPLIED_COLOUR"));
+                        .define("EMIT_COLOUR"));
 
 
         this.ssao = SSAO.createSSAO(properties, VoxyConfig.CONFIG.getSSAOMode());
@@ -109,7 +110,9 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
         boolean useFog = VoxyConfig.CONFIG.useEnvironmentalFog
                 && VoxyConfig.CONFIG.fogIntensity > 0.0f
                 && Math.abs(fogEnd - fogStart) > 1.0f;
-        boolean fogCoversAllRendering = useFog && fogEnd < renderDistance;
+        var camera = Minecraft.getInstance().gameRenderer.getMainCamera();
+        boolean cameraInFluid = camera != null && camera.getFluidInCamera() != FogType.NONE;
+        boolean fogCoversAllRendering = cameraInFluid || (useFog && fogEnd < renderDistance);
 
         if (useFog) {
             glUniform2f(4, fogStart, fogEnd);
@@ -131,8 +134,8 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
         //Unbelievably jank hack, only blit out to the framebuffer if we are rendering fog
         if (!fogCoversAllRendering) {
             glEnable(GL_BLEND);
-            // Translucent LOD colour is already premultiplied in the intermediate target.
-            glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+            // The LOD target stores straight-alpha water; composite it like vanilla translucency.
+            glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
             AbstractRenderPipeline.transformBlitDepth(this.finalBlit, this.fb.getDepthTex().id, sourceFrameBuffer, viewport, new Matrix4f(viewport.vanillaProjection).mul(viewport.modelView));
             glDisable(GL_BLEND);
         } else {

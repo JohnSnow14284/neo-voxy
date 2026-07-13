@@ -43,6 +43,7 @@ public class SoftwareRasterizer {
 
     private boolean cullBackFace;
     private boolean doTheBlending;
+    private boolean replaceTranslucentColour;
 
     private int samplerWidth;
     private int samplerHeight;
@@ -58,7 +59,12 @@ public class SoftwareRasterizer {
     }
 
     public void setBlending(boolean blending) {
+        this.setBlending(blending, false);
+    }
+
+    public void setBlending(boolean blending, boolean replaceTranslucentColour) {
         this.doTheBlending = blending;
+        this.replaceTranslucentColour = replaceTranslucentColour;
     }
 
     public void setSamplerTexture(int[] texture, int width, int height) {
@@ -212,8 +218,7 @@ public class SoftwareRasterizer {
         int srcColour = (int) this.framebuffer[index];
         this.framebuffer[index] &= ~Integer.toUnsignedLong(-1);
 
-        if (this.doTheBlending) {//Blending
-            //mutate colour var
+        if (this.doTheBlending && !this.replaceTranslucentColour) {
             colour = doBlending(srcColour, colour);
         }
 

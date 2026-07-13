@@ -32,6 +32,10 @@
   支持标准交叉面地面植物的轻量 LOD 表现，并尽量避免影响作物、藤蔓、睡莲等特殊模型。
   Supports lightweight crossed-plane LOD models for standard ground plants while avoiding unwanted changes to crops, vines, lily pads, and other special models.
 
+- **无光影水体修复 / No-shader water rendering**
+  采用直通 Alpha 的流体纹理烘焙、标准 `SRC_ALPHA` 合成和流体面顺序优化，改善关闭光影时远景水面的颜色、透明度与岸线表现。
+  Uses straight-alpha fluid baking, standard `SRC_ALPHA` compositing, and ordered fluid-face submission to improve distant water colour, transparency, and shorelines without shaders.
+
 - **荧光液正式兼容 / First-class Lumisene Fluids compatibility**
   本项目已将 Lumisene Fluids（荧光液）列为正式兼容目标，并针对其流体 LOD 颜色与渲染行为进行适配。
   This port treats Lumisene Fluids as a first-class compatibility target, including dedicated handling for its LOD fluid colour and rendering behaviour.
@@ -132,12 +136,17 @@ The build may also retain an intermediate JAR with the `-unoptimized` suffix for
 |---|---|
 | [MCRcortex](https://github.com/MCRcortex) | Original Voxy author |
 | [m3t4f1v3](https://github.com/m3t4f1v3) | Community fork and implementation references |
+| [NHblock714/voxy](https://github.com/NHblock714/voxy) | No-shader water straight-alpha baking, compositing, and fluid-face ordering reference |
 | [yarnobachmann](https://github.com/yarnobachmann) | Earlier NeoForge porting work |
 | Sodium contributors | Rendering infrastructure and performance work |
 | Iris contributors | Shader integration ecosystem |
 | NeoForge contributors | NeoForge platform and tooling |
 | FakeSight contributors | Extended chunk request concept |
 | Minecraft modding community | Testing, issue reports, and compatibility feedback |
+
+无光影水体处理中的直通 Alpha 烘焙、`SRC_ALPHA` 合成与流体面排序方案，参考并适配自 [NHblock714/voxy](https://github.com/NHblock714/voxy)。
+
+The straight-alpha bake, `SRC_ALPHA` composite, and fluid-face ordering used by the no-shader water path were studied and adapted from [NHblock714/voxy](https://github.com/NHblock714/voxy).
 
 感谢所有原作者、分支维护者、测试者和问题反馈者。
 
