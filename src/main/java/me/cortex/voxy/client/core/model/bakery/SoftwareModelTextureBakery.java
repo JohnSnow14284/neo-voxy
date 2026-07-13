@@ -1,10 +1,8 @@
 package me.cortex.voxy.client.core.model.bakery;
 
-import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-
 import me.cortex.voxy.client.core.model.ModelFactory;
 import me.cortex.voxy.common.util.UnsafeUtil;
 import me.cortex.voxy.common.world.other.Mapper;
@@ -26,37 +24,24 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.SingleThreadedRandomSource;
 import net.minecraft.world.level.lighting.LevelLightEngine;
-import net.neoforged.neoforge.client.model.data.ModelData;
 import net.minecraft.world.level.material.FluidState;
+import net.neoforged.neoforge.client.model.data.ModelData;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.lwjgl.system.MemoryUtil;
 
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
 
-import static org.lwjgl.opengl.ARBDirectStateAccess.glGetTextureImage;
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL11C.GL_RGBA;
-import static org.lwjgl.opengl.GL12.GL_PACK_IMAGE_HEIGHT;
-import static org.lwjgl.opengl.GL15C.glBindBuffer;
-import static org.lwjgl.opengl.GL21.GL_PIXEL_PACK_BUFFER;
-import static org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER;
-import static org.lwjgl.opengl.GL30C.glBindFramebuffer;
 
 public class SoftwareModelTextureBakery {
-    // Note: the first bit of metadata is if alpha discard is enabled
     private static final Matrix4f[] VIEWS = new Matrix4f[6];
 
     private final ReuseVertexConsumer opaqueVC = new ReuseVertexConsumer();
-    private final ReuseVertexConsumer translucentVC = new ReuseVertexConsumer(1/*has discard*/);
+    private final ReuseVertexConsumer translucentVC = new ReuseVertexConsumer(1);
     private final SoftwareRasterizer rasterizer = new SoftwareRasterizer(ModelFactory.MODEL_TEXTURE_SIZE);
     private final Mapper mapper;
 
@@ -220,6 +205,7 @@ public class SoftwareModelTextureBakery {
             public int getBrightness(LightLayer type, BlockPos pos) {
                 return 0;
             }
+
             @Override
             public int getBlockTint(BlockPos pos, ColorResolver colorResolver) {
                 translucentVC.setDefaultMeta(translucentVC.getDefaultMeta() | 4);
@@ -241,15 +227,6 @@ public class SoftwareModelTextureBakery {
                     return Blocks.AIR.defaultBlockState();
                 }
 
-                //Fixme:
-                // This makes it so that the top face of water is always air, if this is commented out
-                //  the up block will be a liquid state which makes the sides full
-                // if this is uncommented, that issue is fixed but e.g. stacking water layers ontop of eachother
-                //  doesnt fill the side of the block
-
-                //if (pos.getY() == 1) {
-                //    return Blocks.AIR.getDefaultState();
-                //}
                 return state;
             }
 
@@ -276,16 +253,13 @@ public class SoftwareModelTextureBakery {
             public float getShade(Direction direction, boolean bl) {
                 return getVanillaLikeFluidShade(direction);
             }
-        
         };
-        
-        VertexConsumer vc = this.opaqueVC;;
 
-        if (layer == RenderType.translucent()) vc = this.translucentVC;
+        VertexConsumer vc = layer == RenderType.translucent() ? this.translucentVC : this.opaqueVC;
         if (layer == RenderType.cutout()) {
-            this.opaqueVC.setDefaultMeta(this.opaqueVC.getDefaultMeta()|1);//set discard
+            this.opaqueVC.setDefaultMeta(this.opaqueVC.getDefaultMeta() | 1);
         } else {
-            this.opaqueVC.setDefaultMeta(this.opaqueVC.getDefaultMeta()&~1);//remove discard
+            this.opaqueVC.setDefaultMeta(this.opaqueVC.getDefaultMeta() & ~1);
         }
         try {
             Minecraft.getInstance().getBlockRenderer().renderLiquid(BlockPos.ZERO, getter, vc, state, state.getFluidState());
@@ -296,7 +270,6 @@ public class SoftwareModelTextureBakery {
             this.opaqueVC.setDefaultMeta(0);
         }
     }
-
 
     private static float getVanillaLikeFluidShade(Direction direction) {
         if (direction == null) {
@@ -329,10 +302,7 @@ public class SoftwareModelTextureBakery {
 
     private static final long SINGLE_FACE_OUTPUT_SIZE = (ModelFactory.MODEL_TEXTURE_SIZE
             * ModelFactory.MODEL_TEXTURE_SIZE) * 8;
-    // The outputBuffer layout is different from the non software rasterized
-    // ModelTextureBakery
-    // in this version the values are simply appended
-    // (0,0),(1,0),(2,0),(0,1),(1,1),(2,1)
+    // Faces are appended in direction order: down, up, north, south, west, east.
 
     public int renderToOutput(int blockId, BlockState state, long outputBuffer) {
         MemoryUtil.memSet(outputBuffer, 0, 16 * 16 * 8 * 6);
@@ -350,14 +320,8 @@ public class SoftwareModelTextureBakery {
             }
         }
 
-        // TODO: support block model entities
-        // BakedBlockEntityModel bbem = null;
-        if (state.hasBlockEntity()) {
-            // bbem = BakedBlockEntityModel.bake(state);
-        }
-
         boolean isAnyShaded = false;
-        boolean isAnyDarkend = false;
+        boolean isAnyDarkened = false;
         boolean anyTranslucent = false;
         boolean anyDiscard = false;
         boolean centeredGroundCross = false;
@@ -366,11 +330,10 @@ public class SoftwareModelTextureBakery {
             this.translucentVC.reset();
             centeredGroundCross = this.bakeBlockModel(blockId, state, blockRenderLayer);
             isAnyShaded |= this.opaqueVC.anyShaded | this.translucentVC.anyShaded;
-            isAnyDarkend |= this.opaqueVC.anyDarkendTex | this.translucentVC.anyDarkendTex;
+            isAnyDarkened |= this.opaqueVC.anyDarkendTex | this.translucentVC.anyDarkendTex;
             anyTranslucent |= !this.translucentVC.isEmpty();
             anyDiscard |= this.opaqueVC.anyDiscard;
-            if (!(this.opaqueVC.isEmpty() && this.translucentVC.isEmpty())) {// only render if there... is shit to
-                                                                             // render
+            if (!(this.opaqueVC.isEmpty() && this.translucentVC.isEmpty())) {
                 for (int i = 0; i < VIEWS.length; i++) {
                     this.rasterizer.setFaceCull(i == 1 || i == 2 || i == 4);
                     this.rasterizer.clear();
@@ -382,17 +345,12 @@ public class SoftwareModelTextureBakery {
                             outputBuffer + (SINGLE_FACE_OUTPUT_SIZE * i));
                 }
             }
-        } else {// Is fluid, slow path :(
-
-            if (!ModelFactory.isFluidBlockState(state))
+        } else {
+            if (!ModelFactory.isFluidBlockState(state)) {
                 throw new IllegalStateException();
+            }
             for (int i = 0; i < VIEWS.length; i++) {
-                // Lumisene's sprite-based fluid colour now bakes correctly, but its
-                // side faces appear as large vertical LOD cards around shorelines and
-                // holes. Keep the fix narrow and lightweight: only omit Lumisene's
-                // horizontal side-face bakes. The top and bottom faces still use the
-                // normal Minecraft renderLiquid() path, so the coloured fluid surface
-                // remains visible while the spurious walls disappear.
+                // Supplement's Lumisene Fluids use surface-only LOD geometry.
                 if (ModelFactory.isLumiseneFluidBlockState(state) && isHorizontalFluidSideFace(i)) {
                     continue;
                 }
@@ -400,21 +358,20 @@ public class SoftwareModelTextureBakery {
                 this.opaqueVC.reset();
                 this.translucentVC.reset();
                 this.bakeFluidState(state, i, blockRenderLayer);
-                if (this.opaqueVC.isEmpty() && this.translucentVC.isEmpty())
+                if (this.opaqueVC.isEmpty() && this.translucentVC.isEmpty()) {
                     continue;
+                }
                 isAnyShaded |= this.opaqueVC.anyShaded | this.translucentVC.anyShaded;
-                isAnyDarkend |= this.opaqueVC.anyDarkendTex | this.translucentVC.anyDarkendTex;
+                isAnyDarkened |= this.opaqueVC.anyDarkendTex | this.translucentVC.anyDarkendTex;
                 anyTranslucent |= !this.translucentVC.isEmpty();
                 anyDiscard |= this.opaqueVC.anyDiscard;
 
                 this.rasterizer.setFaceCull(i == 1 || i == 2 || i == 4);
 
-                // The projection matrix
                 this.rasterizer.clear();
                 this.rasterizer.setBlending(false);
                 this.rasterizer.raster(VIEWS[i], this.opaqueVC);
-                // Duplicate opposite-winding liquid quads must not accumulate alpha in the
-                // baked texture. Replace the translucent sample to keep straight-alpha data.
+                // Preserve straight alpha when opposite-winding fluid quads overlap.
                 this.rasterizer.setBlending(true, true);
                 this.rasterizer.raster(VIEWS[i], this.translucentVC);
                 UnsafeUtil.memcpy(this.rasterizer.getRawFramebuffer(), outputBuffer + (SINGLE_FACE_OUTPUT_SIZE * i));
@@ -422,23 +379,21 @@ public class SoftwareModelTextureBakery {
         }
 
         return (isAnyShaded ? 1 : 0)
-                | (isAnyDarkend ? 2 : 0)
+                | (isAnyDarkened ? 2 : 0)
                 | (anyTranslucent ? 4 : 0)
                 | (anyDiscard ? 8 : 0)
                 | (centeredGroundCross ? FLAG_CENTERED_GROUND_CROSS : 0);
     }
 
-
     static {
-        // the face/direction is the face (e.g. down is the down face)
-        addView(0, -90, 0, 0, 0);// Direction.DOWN
-        addView(1, 90, 0, 0, 0b100);// Direction.UP
+        addView(0, -90, 0, 0, 0);
+        addView(1, 90, 0, 0, 0b100);
 
-        addView(2, 0, 180, 0, 0b001);// Direction.NORTH
-        addView(3, 0, 0, 0, 0);// Direction.SOUTH
+        addView(2, 0, 180, 0, 0b001);
+        addView(3, 0, 0, 0, 0);
 
-        addView(4, 0, 90, 270, 0b100);// Direction.WEST
-        addView(5, 0, 270, 270, 0);// Direction.EAST
+        addView(4, 0, 90, 270, 0b100);
+        addView(5, 0, 270, 270, 0);
     }
 
     private static void addView(int i, float pitch, float yaw, float rotation, int flip) {

@@ -53,10 +53,7 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
     protected NormalRenderPipeline(RenderProperties properties, AsyncNodeManager nodeManager, NodeCleaner nodeCleaner, HierarchicalOcclusionTraverser traversal, BooleanSupplier frexSupplier) {
         super(properties, nodeManager, nodeCleaner, traversal, frexSupplier, false);
         this.finalBlit = new FullscreenBlit(properties, "voxy:post/blit_texture_depth_cutout.frag",
-                a -> a.define("USE_ENV_FOG")
-                        .define("EMIT_COLOUR"));
-
-
+                builder -> builder.define("USE_ENV_FOG").define("EMIT_COLOUR"));
         this.ssao = SSAO.createSSAO(properties, VoxyConfig.CONFIG.getSSAOMode());
     }
 
@@ -75,7 +72,6 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
             this.fb.framebuffer.bind(GL_COLOR_ATTACHMENT0, this.colourTex).verify();
             this.fbSSAO.bind(this.fb.getDepthAttachmentType(), this.fb.getDepthTex()).bind(GL_COLOR_ATTACHMENT0, this.colourSSAOTex).verify();
 
-
             glTextureParameterf(this.colourTex.id, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
             glTextureParameterf(this.colourTex.id, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
             glTextureParameterf(this.colourSSAOTex.id, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -93,7 +89,7 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
         GPUTiming.INSTANCE.marker("ao");
         this.ssao.computeSSAO(viewport, this.colourSSAOTex, this.colourTex, this.fb.getDepthTex(), sourceFrameBuffer);
 
-        // Publish the compute result before translucent terrain uses it as a render target.
+        // Make the SSAO image writes visible before translucent terrain uses the target.
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_FRAMEBUFFER_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
         glBindFramebuffer(GL_FRAMEBUFFER, this.fbSSAO.id);
     }
@@ -103,7 +99,7 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
         this.finalBlit.bind();
         var vrs = IGetVoxyRenderSystem.getNullable();
         float fogStart = vrs != null ? vrs.getCapturedFogStart() : RenderSystem.getShaderFogStart();
-        float fogEnd   = vrs != null ? vrs.getCapturedFogEnd()   : RenderSystem.getShaderFogEnd();
+        float fogEnd = vrs != null ? vrs.getCapturedFogEnd()   : RenderSystem.getShaderFogEnd();
         float[] fogColor = vrs != null ? vrs.getCapturedFogColor() : RenderSystem.getShaderFogColor();
 
         float renderDistance = Minecraft.getInstance().gameRenderer.getRenderDistance();
@@ -130,11 +126,9 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
 
         glBindTextureUnit(3, this.colourSSAOTex.id);
 
-        //Do alpha blending
-        //Unbelievably jank hack, only blit out to the framebuffer if we are rendering fog
         if (!fogCoversAllRendering) {
             glEnable(GL_BLEND);
-            // The LOD target stores straight-alpha water; composite it like vanilla translucency.
+            // The LOD target stores straight-alpha translucency.
             glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
             AbstractRenderPipeline.transformBlitDepth(this.finalBlit, this.fb.getDepthTex().id, sourceFrameBuffer, viewport, new Matrix4f(viewport.vanillaProjection).mul(viewport.modelView));
             glDisable(GL_BLEND);
@@ -142,7 +136,6 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
             glDisable(GL_STENCIL_TEST);
             glDisable(GL_DEPTH_TEST);
         }
-        //glBlitNamedFramebuffer(this.fbSSAO.id, sourceFrameBuffer, 0,0, viewport.width, viewport.height, 0,0, viewport.width, viewport.height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     }
 
     @Override

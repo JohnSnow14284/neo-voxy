@@ -14,11 +14,11 @@ import java.util.concurrent.locks.StampedLock;
 
 public class ActiveSectionTracker {
 
-    //Deserialize into the supplied section, returns true on success, false on failure
-    public interface SectionLoader {int load(WorldSection section);}
+    public interface SectionLoader {
+        int load(WorldSection section);
+    }
 
-    //Loaded section world cache, TODO: get rid of VolatileHolder and use something more sane
-    private static final class VolatileHolder <T> {
+    private static final class VolatileHolder<T> {
         private static final VarHandle PRE_ACQUIRE_COUNT;
         private static final VarHandle POST_ACQUIRE_COUNT;
         static {
@@ -41,7 +41,7 @@ public class ActiveSectionTracker {
 
     private final int lruSize;
     private final StampedLock lruLock = new StampedLock();
-    private final Long2ObjectLinkedOpenHashMap<WorldSection> lruSecondaryCache;//TODO: THIS NEEDS TO BECOME A GLOBAL STATIC CACHE
+    private final Long2ObjectLinkedOpenHashMap<WorldSection> lruSecondaryCache;
 
     @Nullable
     public final WorldEngine engine;
@@ -55,9 +55,9 @@ public class ActiveSectionTracker {
         this.engine = engine;
 
         this.loader = loader;
-        this.loadedSectionCache = new Long2ObjectOpenHashMap[1<<numSlicesBits];
+        this.loadedSectionCache = new Long2ObjectOpenHashMap[1 << numSlicesBits];
         this.lruSecondaryCache = new Long2ObjectLinkedOpenHashMap<>(cacheSize);
-        this.locks = new StampedLock[1<<numSlicesBits];
+        this.locks = new StampedLock[1 << numSlicesBits];
         this.lruSize = cacheSize;
         for (int i = 0; i < this.loadedSectionCache.length; i++) {
             this.loadedSectionCache[i] = new Long2ObjectOpenHashMap<>(1024);
@@ -70,8 +70,9 @@ public class ActiveSectionTracker {
     }
 
     public WorldSection acquire(long key, boolean nullOnEmpty) {
-        //TODO: add optional verification check to ensure this (or other critical systems) arnt being called on the render or server thread
-        if (this.engine != null) this.engine.lastActiveTime = System.currentTimeMillis();
+        if (this.engine != null) {
+            this.engine.lastActiveTime = System.currentTimeMillis();
+        }
         int index = this.getCacheArrayIndex(key);
         var cache = this.loadedSectionCache[index];
         final var lock = this.locks[index];
@@ -82,7 +83,7 @@ public class ActiveSectionTracker {
         {
             long stamp = lock.readLock();
             holder = cache.get(key);
-            if (holder != null) {//Return already loaded entry
+            if (holder != null) {
                 section = holder.obj;
                 if (section != null) {
                     section.acquire();
@@ -90,21 +91,21 @@ public class ActiveSectionTracker {
                     return section;
                 }
                 lock.unlockRead(stamp);
-            } else {//Try to create holder
+            } else {
                 holder = new VolatileHolder<>();
                 long ws = lock.tryConvertToWriteLock(stamp);
-                if (ws == 0) {//Failed to convert, unlock read and get write
+                if (ws == 0) {
                     lock.unlockRead(stamp);
                     stamp = lock.writeLock();
                 } else {
                     stamp = ws;
                 }
-                var eHolder = cache.putIfAbsent(key, holder);//We put if absent because on failure to convert to write, it leaves race condition
+                var existingHolder = cache.putIfAbsent(key, holder);
                 lock.unlockWrite(stamp);
-                if (eHolder == null) {//We are the loader
+                if (existingHolder == null) {
                     isLoader = true;
                 } else {
-                    holder = eHolder;
+                    holder = existingHolder;
                 }
             }
         }
@@ -116,7 +117,8 @@ public class ActiveSectionTracker {
             section = this.lruSecondaryCache.remove(key);
 
             WorldSection removal = null;
-            if (section == null && (!this.lruSecondaryCache.isEmpty()) && this.lruSize+100<this.lruSecondaryCache.size()+this.getLoadedCacheCount()) {//Add a self clamping lru case for when there are alot of loaded sections
+            if (section == null && !this.lruSecondaryCache.isEmpty()
+                    && this.lruSize + 100 < this.lruSecondaryCache.size() + this.getLoadedCacheCount()) {
                 removal = this.lruSecondaryCache.removeFirst();
             }
 
@@ -134,10 +136,9 @@ public class ActiveSectionTracker {
             VolatileHolder.PRE_ACQUIRE_COUNT.getAndAdd(holder, 1);
         }
 
-        //If this thread was the one to create the reference then its the thread to load the section
         if (isLoader) {
             int status = 0;
-            if (section == null) {//Secondary cache miss
+            if (section == null) {
                 section = new WorldSection(WorldEngine.getLevel(key),
                         WorldEngine.getX(key),
                         WorldEngine.getY(key),
@@ -147,15 +148,11 @@ public class ActiveSectionTracker {
                 status = this.loader.load(section);
 
                 if (status < 0) {
-                    //TODO: Instead if throwing an exception do something better, like attempting to regen
-                    //throw new IllegalStateException("Unable to load section: ");
                     Logger.error("Unable to load section " + section.key + " setting to air");
                     status = 1;
                 }
 
-                //TODO: REWRITE THE section tracker _again_ to not be so shit and jank, and so that Arrays.fill is not 10% of the execution time
                 if (status == 1) {
-                    //We need to set the data to air as it is undefined state
                     int sky = 15;
                     int block = 0;
                     Arrays.fill(section.data, Mapper.composeMappingId((byte) (sky|(block<<4)),0,0));
@@ -163,21 +160,18 @@ public class ActiveSectionTracker {
                 section.acquire(1);
             }
             int preAcquireCount = (int) VolatileHolder.PRE_ACQUIRE_COUNT.getAndSet(holder, 0);
-            section.acquire(preAcquireCount);//pre acquire amount
+            section.acquire(preAcquireCount);
             VolatileHolder.POST_ACQUIRE_COUNT.set(holder, preAcquireCount);
 
-            //TODO: mark if the section was loaded null
-
-            VarHandle.storeStoreFence();//Do not reorder setting this object
+            VarHandle.storeStoreFence();
             holder.obj = section;
             VarHandle.releaseFence();
-            if (nullOnEmpty && status == 1) {//If its air return null as stated, release the section aswell
+            if (nullOnEmpty && status == 1) {
                 section.release();
                 return null;
             }
             return section;
         } else {
-            //TODO: mark the time the loading started in nanos, then here if it has been a while, spin lock, else jump back to the executing service and do work
             VarHandle.fullFence();
             while ((section = holder.obj) == null) {
                 VarHandle.fullFence();
@@ -185,20 +179,13 @@ public class ActiveSectionTracker {
                 Thread.yield();
             }
 
-            //Try to acquire a pre lock
             if (0<((int)VolatileHolder.POST_ACQUIRE_COUNT.getAndAdd(holder, -1))) {
-                //We managed to acquire one of the pre locks, so just return the section
                 return section;
             } else {
-                //lock.lock();
-                {//Dont think need to lock here
-                    if (section.tryAcquire()) {
-                        return section;
-                    }
+                if (section.tryAcquire()) {
+                    return section;
                 }
-                //lock.unlock();
 
-                //We failed everything, try get it again
                 return this.acquire(key, nullOnEmpty);
             }
         }
