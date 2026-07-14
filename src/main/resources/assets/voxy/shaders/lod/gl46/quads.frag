@@ -147,13 +147,12 @@ vec4 computeColour(vec2 texturePos, vec4 colour) {
 
 #endif
 
-float getLodBoundaryFade() {
-    if (lodBoundaryFadeEnd <= lodBoundaryFadeStart) return 1.0f;
+float getLodBoundaryDistance() {
     // Quad positions are relative to the current 32-block base section. Remove
     // the camera's sub-section offset to keep the circle centred on the player
     // and moving continuously instead of snapping at section boundaries.
     vec2 cameraRelativePos = relativeWorldPos.xz - cameraSubPos.xz;
-    return smoothstep(lodBoundaryFadeStart, lodBoundaryFadeEnd, length(cameraRelativePos));
+    return length(cameraRelativePos);
 }
 
 void main() {
@@ -249,11 +248,15 @@ void main() {
     }
     #endif
 
-    // The fullscreen boundary pass makes one complementary ownership choice
-    // per visible screen pixel. Do not dither individual LOD fragments here:
-    // doing so cuts a cylinder through the terrain and exposes underground
-    // geometry when shaders are active.
-    float lodBoundaryFade = getLodBoundaryFade();
+    float boundaryDistance = getLodBoundaryDistance();
+    bool boundaryEnabled = lodBoundaryFadeEnd > lodBoundaryFadeStart;
+    if (boundaryEnabled && boundaryDistance < lodBoundaryFadeEnd) {
+        // LOD geometry is cached for one chunk inside the circle, but it must
+        // never contribute colour or depth on the vanilla-owned side.
+        discard;
+        return;
+    }
+    float lodBoundaryFade = 1.0f;
 
     #ifndef PATCHED_SHADER
     colour = computeColour(texPos, colour);

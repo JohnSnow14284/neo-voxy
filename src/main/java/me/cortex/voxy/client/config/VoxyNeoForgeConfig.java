@@ -58,19 +58,19 @@ public final class VoxyNeoForgeConfig {
             .defineInRange("lodBoundaryBuffer", 1, 0, 4);
 
     private static final ModConfigSpec.BooleanValue ENABLE_LOD_BOUNDARY_FADE = BUILDER
-            .comment("Blend Voxy LOD terrain into the edge of vanilla terrain.",
-                     "Uses a shader-safe dithered overlap similar to Photon's distant-terrain transition.")
+            .comment("Use an exclusive circular handoff between vanilla terrain and Voxy LOD.",
+                     "Vanilla shades inside the circle; Voxy shades outside it.")
             .define("enableLodBoundaryFade", true);
 
     private static final ModConfigSpec.IntValue LOD_BOUNDARY_OVERDRAW_DISTANCE = BUILDER
-            .comment("Fully visible overlap between vanilla terrain and Voxy LODs, in blocks.",
-                     "The default mirrors Photon's 16-block distant-terrain overdraw.")
+            .comment("Inset of the visible circular handoff from vanilla render distance, in blocks.",
+                     "The default leaves one 16-block chunk outside the circle for stable replacement.")
             .defineInRange("lodBoundaryOverdrawDistance", 16, 0, 64);
 
     private static final ModConfigSpec.IntValue LOD_BOUNDARY_FADE_LENGTH = BUILDER
-            .comment("Length of the vanilla-to-Voxy dithered fade band, in blocks.",
-                     "The default mirrors Photon's 16-block distant-terrain fade.")
-            .defineInRange("lodBoundaryFadeLength", 16, 0, 64);
+            .comment("Cached LOD overlap inside the circular vanilla boundary, in blocks.",
+                     "At least one 16-block chunk is always prepared, but never shades inside the circle.")
+            .defineInRange("lodBoundaryFadeLength", 16, 16, 64);
 
     private static final ModConfigSpec.IntValue EARTH_CURVE_RATIO = BUILDER
             .comment("World curvature effect - simulates standing on a spherical planet",

@@ -21,8 +21,8 @@
   Integrates with Sodium's terrain stages, camera data, and options UI while retaining Voxy's dedicated LOD renderer.
 
 - **原版区块与 LOD 空间淡入 / Vanilla-to-LOD spatial fade**
-  以玩家为圆心绘制随相机连续移动的交接带：圆内仅显示原版区块，圆外仅显示 Voxy LOD；渐变环内每个像素也只归属其中一方，避免深度竞争与光影空洞。
-  Draws a continuously camera-centred hand-off band: only vanilla chunks are visible inside the circle and only Voxy LOD outside it; every transition-ring pixel also has one owner, preventing depth competition and shader-only gaps.
+  以玩家为圆心绘制随相机连续移动的交接边界：圆内仅显示原版区块，圆外仅显示 Voxy LOD。LOD 会向圆内额外缓存至少一个区块，但该重叠层不参与着色或深度竞争，用于避免移动时产生空洞。
+  Draws a continuously camera-centred hand-off boundary: only vanilla chunks are visible inside the circle and only Voxy LOD outside it. At least one extra LOD chunk is cached beneath the inner side without contributing colour or depth, preventing gaps while moving.
 
 - **扩展区块请求 / Extended chunk requests**
   单人游戏最高可请求 127 区块；移动时保持 32 区块以优先刷新原版地形，停止后再逐级扩展远景请求。

@@ -155,7 +155,7 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                                         "voxy:lod_boundary_fade_length",
                                         Component.translatable("voxy.config.general.lodBoundaryFadeLength"),
                                         ()->CFG.lodBoundaryFadeLength, v->CFG.lodBoundaryFadeLength=v,
-                                        new Range(0, 64, 1))
+                                        new Range(16, 64, 1))
                                         .setFormatter(v->Component.literal(v + " blocks"))
                                         .setImpact(OptionImpact.LOW)
                                         .setEnabler("voxy:lod_boundary_fade"),

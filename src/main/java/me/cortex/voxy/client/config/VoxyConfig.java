@@ -155,7 +155,7 @@ public class VoxyConfig {
         this.fogDensity = Math.clamp(this.fogDensity, 0.0f, 1.0f);
         this.lodBoundaryBuffer = Math.clamp(this.lodBoundaryBuffer, 0, 4);
         this.lodBoundaryOverdrawDistance = Math.clamp(this.lodBoundaryOverdrawDistance, 0, 64);
-        this.lodBoundaryFadeLength = Math.clamp(this.lodBoundaryFadeLength, 0, 64);
+        this.lodBoundaryFadeLength = Math.clamp(this.lodBoundaryFadeLength, 16, 64);
         this.setLeafLodMode(this.getLeafLodMode());
         this.farPlayerAnimationDistance = Math.clamp(this.farPlayerAnimationDistance, 0, 32768);
     }

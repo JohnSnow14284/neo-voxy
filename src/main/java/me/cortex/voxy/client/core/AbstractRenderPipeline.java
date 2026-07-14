@@ -175,8 +175,7 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
                     .invert()
                     .getToAddress(SCRATCH);
             nglUniformMatrix4fv(2, 1, false, SCRATCH);
-            glUniform1f(6, boundaryFade.fadeStart());
-            glUniform1f(7, boundaryFade.fadeEnd());
+            glUniform1f(6, boundaryFade.fadeEnd());
             glStencilFunc(GL_ALWAYS, 1, 0xFF);
             this.depthStencilBoundaryOverlap.blit();
         }
