@@ -21,8 +21,8 @@
   Integrates with Sodium's terrain stages, camera data, and options UI while retaining Voxy's dedicated LOD renderer.
 
 - **扩展区块请求 / Extended chunk requests**
-  单人游戏可即时请求最高 48 区块；多人游戏仍受远程服务端视距限制。
-  Singleplayer can immediately request up to 48 chunks; multiplayer remains bounded by the remote server view distance.
+  单人游戏最高可请求 127 区块；移动时保持 32 区块以优先刷新原版地形，停止后再逐级扩展远景请求。
+  Singleplayer can request up to 127 chunks; it stays at 32 while moving to prioritise vanilla terrain, then gradually expands the distant request while stationary.
 
 - **无光影水体优化 / No-shader water improvements**
   采用直通 Alpha 烘焙、标准 `SRC_ALPHA` 合成和流体面排序，改善关闭光影时远景水体的颜色、透明度、雾中表现与岸线衔接。

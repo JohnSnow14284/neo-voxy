@@ -73,7 +73,8 @@ public final class VoxyNeoForgeConfig {
     private static final ModConfigSpec.IntValue REQUEST_DISTANCE = BUILDER
             .comment("FakeSight request distance in chunks",
                      "This is the chunk distance reported to the server/integrated server.",
-                     "Large values increase server/network/client load. Maximum: 48.")
+                     "Singleplayer expands gradually after movement stops.",
+                     "Large values increase server/client load. Maximum: 127.")
             .defineInRange("requestDistance", 48, VoxyConfig.MIN_REQUEST_DISTANCE, VoxyConfig.MAX_REQUEST_DISTANCE);
 
     private static final ModConfigSpec.BooleanValue RENDER_STATISTICS = BUILDER

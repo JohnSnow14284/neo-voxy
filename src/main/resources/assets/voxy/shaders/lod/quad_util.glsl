@@ -113,6 +113,20 @@ uvec3 makeRemainingAttributes(const in BlockModel model, const in Quad quad, uin
     return attributes;
 }
 
+uint makeBalancedLeafSeed(const in Quad quad, ivec3 lodPos, uint lodLevel, uint face) {
+    uvec3 worldPos = (uvec3(lodPos) << lodLevel) * 32u
+            + (uvec3(extractPos(quad)) << lodLevel);
+    uint hash = worldPos.x * 0x8da6b343u;
+    hash ^= worldPos.y * 0xd8163841u;
+    hash ^= worldPos.z * 0xcb1ab31fu;
+    hash ^= face * 0x165667b1u;
+    hash ^= lodLevel * 0x9e3779b9u;
+    hash ^= hash >> 16u;
+    hash *= 0x7feb352du;
+    hash ^= hash >> 15u;
+    return hash & 0xFFFFu;
+}
+
 float resolveFluidTopIndentation(BlockModel model, uint face, float bakedIndentation, float localY, float lodScale, ivec3 lodPos, uint lodLevel) {
     if (lodLevel == 0u || face != 1u || !modelUsesFluidDatum(model)) return bakedIndentation;
 
@@ -139,6 +153,11 @@ void setupQuad(out QuadData quad, const in Quad rawQuad, uvec2 sPos, bool genera
     if (generateAttributes) {
         quad.attributeData.x = makeQuadFlags(faceData, modelId, quadSize, model, face);
         quad.attributeData.yzw = makeRemainingAttributes(model, rawQuad, lodLevel, face);
+        if (modelUsesBalancedLeafCutout(model)) {
+            // Bits 16..31 are otherwise unused. The fragment shader combines this
+            // stable world seed with the tile coordinate of merged leaf quads.
+            quad.attributeData.w |= makeBalancedLeafSeed(rawQuad, lodPos, lodLevel, face) << 16u;
+        }
     }
 
     vec4 faceSize = getFaceSize(faceData);

@@ -26,7 +26,9 @@ public class VoxyConfig {
     }
 
     public static final int MIN_REQUEST_DISTANCE = 8;
-    public static final int MAX_REQUEST_DISTANCE = 48;
+    // ClientInformation carries view distance in one signed byte. Keeping the
+    // singleplayer extension at 127 avoids wraparound while removing the old 48 cap.
+    public static final int MAX_REQUEST_DISTANCE = 127;
     public static final int MAX_CLOUD_DISTANCE = 128;
     public static final float MIN_SUBDIVISION_SIZE = 28.0f;
     public static final float MAX_SUBDIVISION_SIZE = 256.0f;
