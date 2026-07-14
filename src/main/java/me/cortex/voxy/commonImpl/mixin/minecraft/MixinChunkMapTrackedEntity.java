@@ -33,7 +33,7 @@ public abstract class MixinChunkMapTrackedEntity {
     )
     private int voxy$allowTrainsOutsideChunkView(ChunkMap chunkMap, ServerPlayer player) {
         int original = ((AccessorChunkMap) chunkMap).voxy$invokeGetPlayerViewDistance(player);
-        if (!CreateFarEntityCompat.isCreateTrainEntity(this.entity.getType())) {
+        if (!CreateFarEntityCompat.isCreateDynamicEntity(this.entity.getType())) {
             return original;
         }
         int configured = CreateFarEntityCompat.getPlayerTrackingDistance(player, this.entity.getType());

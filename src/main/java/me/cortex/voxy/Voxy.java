@@ -32,6 +32,7 @@ public class Voxy {
         modEventBus.addListener(this::registerFarEntityPayloads);
         NeoForge.EVENT_BUS.addListener(this.farEntityService::onServerTick);
         NeoForge.EVENT_BUS.addListener(this.farEntityService::onPlayerLoggedOut);
+        NeoForge.EVENT_BUS.addListener(this.farEntityService::onServerStopping);
 
         // Only register client config on client side
         if (FMLLoader.getDist() == Dist.CLIENT) {

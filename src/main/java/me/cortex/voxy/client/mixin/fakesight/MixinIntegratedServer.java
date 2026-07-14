@@ -37,10 +37,7 @@ public abstract class MixinIntegratedServer {
         }
 
         int requestedDistance = VoxyConfig.CONFIG.getEffectiveRequestDistance();
-        int movingFloor = VoxyConfig.CONFIG.enableCreateFarEntityRendering
-                ? Math.max(VOXY_MOVING_DISTANCE, VoxyConfig.CONFIG.getCreateContraptionRenderDistance())
-                : VOXY_MOVING_DISTANCE;
-        int movingDistance = Math.min(requestedDistance, movingFloor);
+        int movingDistance = Math.min(requestedDistance, VOXY_MOVING_DISTANCE);
         var server = (IntegratedServer) (Object) this;
         var players = server.getPlayerList().getPlayers();
         if (players.isEmpty()) {

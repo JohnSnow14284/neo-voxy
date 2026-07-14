@@ -7,6 +7,7 @@
   },
   "mixins": [
     "create.MixinCarriageEntityHandler",
+    "create.MixinControlledContraptionEntity",
     "minecraft.AccessorChunkMap",
     "minecraft.AccessorPalettedContainerData",
     "minecraft.AccessorPalettedContainer",

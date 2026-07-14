@@ -103,7 +103,8 @@ public final class VoxyNeoForgeConfig {
 
     private static final ModConfigSpec.IntValue CREATE_CONTRAPTION_RENDER_DISTANCE = BUILDER
             .comment("Create glued-contraption render distance in chunks.",
-                     "Chunks containing the moving structure/controller are kept in the extended request radius.")
+                     "Moving keeps the normal 32-chunk sliding window; after stopping it expands to this distance.",
+                     "Active contraption anchors also receive temporary runtime tickets.")
             .defineInRange("createContraptionRenderDistance", 48,
                     VoxyConfig.MIN_CREATE_RENDER_DISTANCE, VoxyConfig.MAX_CREATE_RENDER_DISTANCE);
 

@@ -14,6 +14,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
@@ -55,11 +56,20 @@ public final class FarEntityService {
         this.tick(event.getServer());
     }
 
+    public void onServerStopping(ServerStoppingEvent event) {
+        CreateFarEntityCompat.clearContraptionTickets(event.getServer());
+        this.subscribers.clear();
+    }
+
     private void tick(MinecraftServer server) {
-        if (this.subscribers.isEmpty() || ++this.tickCounter < UPDATE_INTERVAL_TICKS) {
+        if (++this.tickCounter < UPDATE_INTERVAL_TICKS) {
             return;
         }
         this.tickCounter = 0;
+        CreateFarEntityCompat.tickContraptionTickets(server);
+        if (this.subscribers.isEmpty()) {
+            return;
+        }
         List<ServerPlayer> players = server.getPlayerList().getPlayers();
         for (ServerPlayer viewer : players) {
             ClientSettings settings = this.subscribers.get(viewer.getUUID());
