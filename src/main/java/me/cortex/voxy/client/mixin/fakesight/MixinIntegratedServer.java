@@ -8,6 +8,8 @@ import org.spongepowered.asm.mixin.injection.ModifyArg;
 
 @Mixin(IntegratedServer.class)
 public abstract class MixinIntegratedServer {
+    private static final int SAFE_INTEGRATED_SERVER_DISTANCE = 32;
+
     @ModifyArg(
             method = "tickServer",
             at = @At(
@@ -19,7 +21,7 @@ public abstract class MixinIntegratedServer {
     )
     private int voxy$modifyIntegratedServerRenderDistance(int originalDistance) {
         if (VoxyConfig.CONFIG.enableExtendedRequestDistance && VoxyConfig.CONFIG.isRenderingEnabled()) {
-            return VoxyConfig.CONFIG.getRequestDistance();
+            return Math.min(VoxyConfig.CONFIG.getRequestDistance(), SAFE_INTEGRATED_SERVER_DISTANCE);
         }
         return originalDistance;
     }

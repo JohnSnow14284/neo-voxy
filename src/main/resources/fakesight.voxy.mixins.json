@@ -3,7 +3,6 @@
   "package": "me.cortex.voxy.client.mixin.fakesight",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "MixinChunkMap",
     "MixinIntegratedServer",
     "MixinOptions",
     "MixinShaderLoader"
