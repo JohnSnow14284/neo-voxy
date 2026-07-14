@@ -4,7 +4,6 @@ import me.cortex.voxy.client.RenderStatistics;
 import me.cortex.voxy.client.TimingStatistics;
 import me.cortex.voxy.client.VoxyClient;
 import me.cortex.voxy.client.core.model.ModelBakerySubsystem;
-import me.cortex.voxy.client.core.rendering.LodBoundaryFade;
 import me.cortex.voxy.client.core.rendering.Viewport;
 import me.cortex.voxy.client.core.rendering.hierachical.AsyncNodeManager;
 import me.cortex.voxy.client.core.rendering.hierachical.HierarchicalOcclusionTraverser;
@@ -56,7 +55,6 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
     protected AbstractSectionRenderer<?,?> sectionRenderer;
 
     private final FullscreenBlit depthStencilSetup;
-    private final FullscreenBlit depthStencilBoundaryOverlap;
 
     public final DepthFramebuffer fb = new DepthFramebuffer(GL_DEPTH24_STENCIL8);
 
@@ -77,7 +75,6 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
         this.deferTranslucency = deferTranslucency;
 
         this.depthStencilSetup = new FullscreenBlit(properties, "voxy:post/fullscreen2.vert", "voxy:post/setup_stencil_depth.frag");
-        this.depthStencilBoundaryOverlap = new FullscreenBlit(properties, "voxy:post/fullscreen2.vert", "voxy:post/setup_boundary_overlap.frag");
     }
 
     //Allows pipelines to configure model baking system
@@ -136,8 +133,7 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
         glBindFramebuffer(GL_FRAMEBUFFER, sourceFrameBuffer);
     }
 
-    protected void initDepthStencil(Viewport<?> viewport, int sourceFrameBuffer, int targetFb,
-                                    int srcWidth, int srcHeight, int width, int height) {
+    protected void initDepthStencil(int sourceFrameBuffer, int targetFb, int srcWidth, int srcHeight, int width, int height) {
         glClearNamedFramebufferfi(targetFb, GL_DEPTH_STENCIL, 0, this.properties.clearDepth(), 1);
         // using blit to copy depth from mismatched depth formats is not portable so instead a full screen pass is performed for a depth copy
         // the mismatched formats in this case is the d32 to d24s8
@@ -161,24 +157,6 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
         glDepthMask(true);
         glColorMask(false,false,false,false);
         this.depthStencilSetup.blit();
-
-        var boundaryFade = LodBoundaryFade.getDistances();
-        if (boundaryFade.enabled()) {
-            // Re-open only the camera-centred circular transition band. Its depth
-            // is cleared to FAR so LOD owns every selected pixel instead of racing
-            // vanilla terrain through a second, incompatible depth representation.
-            this.depthStencilBoundaryOverlap.bind();
-            glBindTextureUnit(0, depthTexture);
-            glUniform2f(1, ((float) width) / srcWidth, ((float) height) / srcHeight);
-            new Matrix4f(viewport.vanillaProjection)
-                    .mul(viewport.modelView)
-                    .invert()
-                    .getToAddress(SCRATCH);
-            nglUniformMatrix4fv(2, 1, false, SCRATCH);
-            glUniform1f(6, boundaryFade.fadeEnd());
-            glStencilFunc(GL_ALWAYS, 1, 0xFF);
-            this.depthStencilBoundaryOverlap.blit();
-        }
 
 
         glDepthFunc(this.properties.closerEqualDepthCompare());
@@ -244,7 +222,6 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
         this.fb.free();
         this.sectionRenderer.free();
         this.depthStencilSetup.delete();
-        this.depthStencilBoundaryOverlap.delete();
         super.free0();
     }
 

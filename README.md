@@ -20,10 +20,6 @@
   接入 Sodium 的区块渲染阶段、相机数据与配置界面，同时保留 Voxy 专用的高性能 LOD 渲染器。
   Integrates with Sodium's terrain stages, camera data, and options UI while retaining Voxy's dedicated LOD renderer.
 
-- **原版区块与 LOD 空间淡入 / Vanilla-to-LOD spatial fade**
-  以玩家为圆心绘制随相机连续移动的交接边界：圆内仅显示原版区块，圆外仅显示 Voxy LOD。LOD 会向圆内额外缓存至少一个区块，但该重叠层不参与着色或深度竞争，用于避免移动时产生空洞。
-  Draws a continuously camera-centred hand-off boundary: only vanilla chunks are visible inside the circle and only Voxy LOD outside it. At least one extra LOD chunk is cached beneath the inner side without contributing colour or depth, preventing gaps while moving.
-
 - **扩展区块请求 / Extended chunk requests**
   单人游戏最高可请求 127 区块；移动时保持 32 区块以优先刷新原版地形，停止后再逐级扩展远景请求。
   Singleplayer can request up to 127 chunks; it stays at 32 while moving to prioritise vanilla terrain, then gradually expands the distant request while stationary.
@@ -101,8 +97,6 @@ Neo-Voxy no longer requires Forgified Fabric API as a separate mandatory prerequ
   Old Domum Ornamentum cache data may not contain dynamic material metadata; clearing the affected world's old Voxy cache is recommended when testing the new compatibility path.
 - 光影兼容性取决于 Iris、Sodium、光影包及其他渲染模组的组合。
   Shader compatibility depends on the combination of Iris, Sodium, the shader pack, and other rendering mods.
-- 原版区块与 LOD 边界淡入默认采用 16 方块重叠和 16 方块渐变；若光影具有特殊的时间抗锯齿，可按实际观感调整渐变长度。
-  The vanilla-to-LOD boundary fade defaults to a 16-block overlap and 16-block transition; tune the fade length when a shader pack uses unusual temporal anti-aliasing.
 - 修改树叶 LOD 模式会自动重载 Voxy 渲染器，不需要删除世界 LOD 缓存。
   Changing the leaf LOD mode reloads the Voxy renderer and does not require deleting the world's LOD cache.
 

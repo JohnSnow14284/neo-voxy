@@ -13,6 +13,7 @@ import me.cortex.voxy.client.core.gl.shader.ShaderType;
 import me.cortex.voxy.client.core.rendering.util.SharedIndexBuffer;
 import me.cortex.voxy.client.core.rendering.util.UploadStream;
 import me.cortex.voxy.common.Logger;
+import net.minecraft.client.Minecraft;
 import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryUtil;
 
@@ -97,7 +98,7 @@ public class ChunkBoundRenderer {
         long ptr = UploadStream.INSTANCE.upload(this.uniformBuffer, 0, 128);
         long matPtr = ptr; ptr += 4*4*4;
 
-        final float maskDistance = LodBoundaryFade.getDistances().maskDistance();
+        final float renderDistance = Minecraft.getInstance().options.getEffectiveRenderDistance()*16;//In blocks
 
         {//This is recomputed to be in chunk section space not worldsection
 
@@ -122,7 +123,7 @@ public class ChunkBoundRenderer {
                     .set(viewport.MVP)
                     .translate(-innerX, -innerY, -innerZ)
                     .getToAddress(matPtr);
-            MemoryUtil.memPutFloat(ptr, maskDistance); ptr += 4;
+            MemoryUtil.memPutFloat(ptr, renderDistance); ptr += 4;
         }
         UploadStream.INSTANCE.commit();
 

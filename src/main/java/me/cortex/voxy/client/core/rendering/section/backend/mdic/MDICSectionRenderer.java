@@ -11,7 +11,6 @@ import me.cortex.voxy.client.core.gl.shader.Shader;
 import me.cortex.voxy.client.core.gl.shader.ShaderLoader;
 import me.cortex.voxy.client.core.gl.shader.ShaderType;
 import me.cortex.voxy.client.core.model.ModelStore;
-import me.cortex.voxy.client.core.rendering.LodBoundaryFade;
 import me.cortex.voxy.client.core.rendering.section.backend.AbstractSectionRenderer;
 import me.cortex.voxy.client.core.rendering.section.geometry.BasicSectionGeometryData;
 import me.cortex.voxy.client.core.rendering.util.DownloadStream;
@@ -169,10 +168,6 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
         MemoryUtil.memPutInt(ptr, viewport.frameId&0x7fffffff); ptr += 4;
         viewport.innerTranslation.getToAddress(ptr); ptr += 4*3;
         MemoryUtil.memPutFloat(ptr, this.fluidDatumY); ptr += 4;
-        var boundaryFade = LodBoundaryFade.getDistances();
-        MemoryUtil.memPutFloat(ptr, boundaryFade.fadeStart()); ptr += 4;
-        MemoryUtil.memPutFloat(ptr, boundaryFade.fadeEnd()); ptr += 4;
-        MemoryUtil.memPutLong(ptr, 0L); ptr += 8;
 
         UploadStream.INSTANCE.commit();
     }

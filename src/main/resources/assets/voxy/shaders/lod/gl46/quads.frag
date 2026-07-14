@@ -21,7 +21,6 @@ layout(location = 0) in flat uvec4 interData;
 #ifndef USE_NV_BARRY
 layout(location = 1) in vec2 uv;
 #endif
-layout(location = 2) in vec3 relativeWorldPos;
 
 #ifdef DEBUG_RENDER
 layout(location = 7) in flat uint quadDebug;
@@ -125,7 +124,6 @@ struct VoxyFragmentParameters {
     vec2 lightMap;
     vec4 tinting;
     uint customId;//Same as iris's modelId
-    float lodBoundaryFade;
 };
 
 void voxy_emitFragment(VoxyFragmentParameters parameters);
@@ -147,13 +145,6 @@ vec4 computeColour(vec2 texturePos, vec4 colour) {
 
 #endif
 
-float getLodBoundaryDistance() {
-    // Quad positions are relative to the current 32-block base section. Remove
-    // the camera's sub-section offset to keep the circle centred on the player
-    // and moving continuously instead of snapping at section boundaries.
-    vec2 cameraRelativePos = relativeWorldPos.xz - cameraSubPos.xz;
-    return length(cameraRelativePos);
-}
 
 void main() {
     //vec2 uv = vec2(0);
@@ -248,16 +239,6 @@ void main() {
     }
     #endif
 
-    float boundaryDistance = getLodBoundaryDistance();
-    bool boundaryEnabled = lodBoundaryFadeEnd > lodBoundaryFadeStart;
-    if (boundaryEnabled && boundaryDistance < lodBoundaryFadeEnd) {
-        // LOD geometry is cached for one chunk inside the circle, but it must
-        // never contribute colour or depth on the vanilla-owned side.
-        discard;
-        return;
-    }
-    float lodBoundaryFade = 1.0f;
-
     #ifndef PATCHED_SHADER
     colour = computeColour(texPos, colour);
     outColour = colour;
@@ -286,7 +267,7 @@ void main() {
 
     uint face = getFace();
     face ^= uint((face&1u)!=uint(gl_FrontFacing!=((face>>1)!=0u)));
-    voxy_emitFragment(VoxyFragmentParameters(colour, tile, texPos, face, modelId, getLightmapUv(interData.y), tint, model.customId, lodBoundaryFade));
+    voxy_emitFragment(VoxyFragmentParameters(colour, tile, texPos, face, modelId, getLightmapUv(interData.y), tint, model.customId));
 
     #endif
 }
