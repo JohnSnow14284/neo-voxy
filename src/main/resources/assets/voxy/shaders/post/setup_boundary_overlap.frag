@@ -4,11 +4,20 @@ layout(binding = 0) uniform sampler2D depthTex;
 layout(location = 1) uniform vec2 scaleFactor;
 layout(location = 2) uniform mat4 inverseVanillaMvp;
 layout(location = 6) uniform float fadeStartDistance;
-layout(location = 7) uniform int preserveVanillaDepth;
+layout(location = 7) uniform float fadeEndDistance;
 
 #import <voxy:util/depthutils.glsl>
 
 in vec2 UV;
+
+float boundaryDither(ivec2 pixelPos) {
+    uint hash = uint(pixelPos.x) * 0x8da6b343u;
+    hash ^= uint(pixelPos.y) * 0xd8163841u;
+    hash ^= hash >> 16u;
+    hash *= 0x7feb352du;
+    hash ^= hash >> 15u;
+    return float(hash & 0xffffu) / 65535.0f;
+}
 
 void main() {
     vec2 sourceUv = UV * scaleFactor;
@@ -23,16 +32,22 @@ void main() {
             * vec4(SCREEN2NDC(vec3(UV, vanillaDepth)), 1.0f);
     cameraRelative.xyz /= cameraRelative.w;
 
-    // Keep the original hard mask inside the circle. From the inner edge of
-    // the ring outwards, preserve vanilla depth and reopen stencil so Voxy's
-    // distance dither can blend the two terrain representations.
-    if (length(cameraRelative.xz) < fadeStartDistance) {
+    // Choose exactly one owner from the visible vanilla surface. Keeping this
+    // decision in screen space prevents discarded surface fragments from
+    // revealing deeper LOD cave geometry through a cylindrical cut.
+    float horizontalDistance = length(cameraRelative.xz);
+    if (horizontalDistance <= fadeStartDistance) {
         discard;
     }
+    if (horizontalDistance < fadeEndDistance) {
+        float fade = smoothstep(fadeStartDistance, fadeEndDistance, horizontalDistance);
+        if (boundaryDither(ivec2(gl_FragCoord.xy)) > fade) {
+            discard;
+        }
+    }
 
-    // Iris draws into the shader pack's existing colour targets, so retain its
-    // terrain depth. The vanilla pipeline uses a private colour target and
-    // leaves FAR here; the final depth-aware composite resolves the overlap
-    // without sampling untouched colour from a previous frame.
-    gl_FragDepth = preserveVanillaDepth != 0 ? vanillaDepth : FAR;
+    // Never retain vanilla depth in the reopened area. In particular, Iris can
+    // encode source and Voxy depth differently; comparing them created the
+    // large empty ring fixed by this pass.
+    gl_FragDepth = FAR;
 }

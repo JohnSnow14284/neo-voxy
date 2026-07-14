@@ -137,8 +137,7 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
     }
 
     protected void initDepthStencil(Viewport<?> viewport, int sourceFrameBuffer, int targetFb,
-                                    int srcWidth, int srcHeight, int width, int height,
-                                    boolean preserveVanillaDepthInOverlap) {
+                                    int srcWidth, int srcHeight, int width, int height) {
         glClearNamedFramebufferfi(targetFb, GL_DEPTH_STENCIL, 0, this.properties.clearDepth(), 1);
         // using blit to copy depth from mismatched depth formats is not portable so instead a full screen pass is performed for a depth copy
         // the mismatched formats in this case is the d32 to d24s8
@@ -165,9 +164,9 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
 
         var boundaryFade = LodBoundaryFade.getDistances();
         if (boundaryFade.enabled()) {
-            // Re-open only the camera-centred circular transition band. Unlike the
-            // normal Voxy mask, this pass keeps the real vanilla depth so the two
-            // terrain renderers can safely overlap and the fragment fade is visible.
+            // Re-open only the camera-centred circular transition band. Its depth
+            // is cleared to FAR so LOD owns every selected pixel instead of racing
+            // vanilla terrain through a second, incompatible depth representation.
             this.depthStencilBoundaryOverlap.bind();
             glBindTextureUnit(0, depthTexture);
             glUniform2f(1, ((float) width) / srcWidth, ((float) height) / srcHeight);
@@ -177,7 +176,7 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
                     .getToAddress(SCRATCH);
             nglUniformMatrix4fv(2, 1, false, SCRATCH);
             glUniform1f(6, boundaryFade.fadeStart());
-            glUniform1i(7, preserveVanillaDepthInOverlap ? 1 : 0);
+            glUniform1f(7, boundaryFade.fadeEnd());
             glStencilFunc(GL_ALWAYS, 1, 0xFF);
             this.depthStencilBoundaryOverlap.blit();
         }

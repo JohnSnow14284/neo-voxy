@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import me.cortex.voxy.client.config.VoxyConfig;
 import me.cortex.voxy.client.core.gl.GlFramebuffer;
 import me.cortex.voxy.client.core.gl.GlTexture;
+import me.cortex.voxy.client.core.rendering.LodBoundaryFade;
 import me.cortex.voxy.client.core.rendering.Viewport;
 import me.cortex.voxy.client.core.rendering.hierachical.AsyncNodeManager;
 import me.cortex.voxy.client.core.rendering.hierachical.HierarchicalOcclusionTraverser;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.function.BooleanSupplier;
 
 import static org.lwjgl.opengl.GL11C.GL_BLEND;
+import static org.lwjgl.opengl.GL11C.GL_ALWAYS;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_COMPONENT;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_TEST;
 import static org.lwjgl.opengl.GL11C.GL_NEAREST;
@@ -30,6 +32,7 @@ import static org.lwjgl.opengl.GL11C.GL_TEXTURE_MAG_FILTER;
 import static org.lwjgl.opengl.GL11C.GL_TEXTURE_MIN_FILTER;
 import static org.lwjgl.opengl.GL11C.glDisable;
 import static org.lwjgl.opengl.GL11C.glEnable;
+import static org.lwjgl.opengl.GL11C.glDepthFunc;
 import static org.lwjgl.opengl.GL14C.glBlendFuncSeparate;
 import static org.lwjgl.opengl.GL20C.glUniform4f;
 import static org.lwjgl.opengl.GL30C.*;
@@ -80,7 +83,7 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
         }
 
         this.initDepthStencil(viewport, sourceFB, this.fb.framebuffer.id,
-                viewport.width, viewport.height, viewport.width, viewport.height, false);
+                viewport.width, viewport.height, viewport.width, viewport.height);
 
         return this.fb.getDepthTex().id;
     }
@@ -131,7 +134,16 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
             glEnable(GL_BLEND);
             // The LOD target stores straight-alpha translucency.
             glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+            boolean exclusiveCircularHandoff = LodBoundaryFade.getDistances().enabled();
+            if (exclusiveCircularHandoff) {
+                // The circular mask already selected Voxy for every emitted pixel.
+                // Do not let vanilla depth outside the circle override that choice.
+                glDepthFunc(GL_ALWAYS);
+            }
             AbstractRenderPipeline.transformBlitDepth(this.finalBlit, this.fb.getDepthTex().id, sourceFrameBuffer, viewport, new Matrix4f(viewport.vanillaProjection).mul(viewport.modelView));
+            if (exclusiveCircularHandoff) {
+                glDepthFunc(this.properties.closerEqualDepthCompare());
+            }
             glDisable(GL_BLEND);
         } else {
             glDisable(GL_STENCIL_TEST);

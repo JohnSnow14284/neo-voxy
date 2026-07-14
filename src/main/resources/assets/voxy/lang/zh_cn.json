@@ -24,7 +24,7 @@
   "voxy.config.general.renderPressure.3": "快速追赶",
   "voxy.config.general.renderPressure.4": "最高追赶",
   "voxy.config.general.lodBoundaryFade": "原版区块与 LOD 边界淡入",
-  "voxy.config.general.lodBoundaryFade.tooltip": "以玩家为圆心绘制随移动更新的圆形交接带，使圆内原版区块平滑过渡到圆外 Voxy LOD 地形。",
+  "voxy.config.general.lodBoundaryFade.tooltip": "使用互斥的玩家中心圆形遮罩：圆内归原版、圆外归 Voxy，渐变像素不再发生深度竞争。",
   "voxy.config.general.lodBoundaryOverdraw": "LOD 边界重叠距离",
   "voxy.config.general.lodBoundaryOverdraw.tooltip": "在原版渲染距离内保留的完全可见重叠区域。Photon 风格默认值为 16 方块。",
   "voxy.config.general.lodBoundaryFadeLength": "LOD 边界淡入长度",

@@ -156,16 +156,6 @@ float getLodBoundaryFade() {
     return smoothstep(lodBoundaryFadeStart, lodBoundaryFadeEnd, length(cameraRelativePos));
 }
 
-float lodBoundaryDither(ivec2 pixelPos) {
-    uint hash = uint(pixelPos.x) * 0x8da6b343u;
-    hash ^= uint(pixelPos.y) * 0xd8163841u;
-    hash ^= hash >> 16u;
-    hash *= 0x7feb352du;
-    hash ^= hash >> 15u;
-    return float(hash & 0xffffu) / 65535.0f;
-}
-
-
 void main() {
     //vec2 uv = vec2(0);
     //Tile is the tile we are in
@@ -259,11 +249,11 @@ void main() {
     }
     #endif
 
+    // The fullscreen boundary pass makes one complementary ownership choice
+    // per visible screen pixel. Do not dither individual LOD fragments here:
+    // doing so cuts a cylinder through the terrain and exposes underground
+    // geometry when shaders are active.
     float lodBoundaryFade = getLodBoundaryFade();
-    if (lodBoundaryDither(ivec2(gl_FragCoord.xy)) > lodBoundaryFade) {
-        discard;
-        return;
-    }
 
     #ifndef PATCHED_SHADER
     colour = computeColour(texPos, colour);
