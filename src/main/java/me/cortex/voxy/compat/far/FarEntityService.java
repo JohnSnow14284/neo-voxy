@@ -1,5 +1,6 @@
 package me.cortex.voxy.compat.far;
 
+import me.cortex.voxy.compat.create.CreateFarEntityCompat;
 import me.cortex.voxy.compat.far.FarEntityProtocol.Hello;
 import me.cortex.voxy.compat.far.FarEntityProtocol.ItemSnapshot;
 import me.cortex.voxy.compat.far.FarEntityProtocol.PlayerBatch;
@@ -31,8 +32,13 @@ public final class FarEntityService {
     public void handleHello(ServerPlayer player, Hello hello) {
         if (hello.version() != FarEntityProtocol.VERSION) {
             this.subscribers.remove(player.getUUID());
+            CreateFarEntityCompat.removePlayerSettings(player.getUUID());
             return;
         }
+        CreateFarEntityCompat.updatePlayerSettings(
+                player.getUUID(), hello.createEnabled(),
+                hello.contraptionDistanceChunks(), hello.trainDistanceChunks()
+        );
         this.subscribers.put(player.getUUID(), new ClientSettings(
                 hello.enabled(),
                 Math.clamp(hello.maximumDistanceBlocks(), 64, MAX_DISTANCE_BLOCKS),
@@ -42,6 +48,7 @@ public final class FarEntityService {
 
     public void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         this.subscribers.remove(event.getEntity().getUUID());
+        CreateFarEntityCompat.removePlayerSettings(event.getEntity().getUUID());
     }
 
     public void onServerTick(ServerTickEvent.Post event) {

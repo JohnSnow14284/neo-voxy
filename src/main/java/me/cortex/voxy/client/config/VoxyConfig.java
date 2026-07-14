@@ -29,6 +29,8 @@ public class VoxyConfig {
     // ClientInformation carries view distance in one signed byte. Keeping the
     // singleplayer extension at 127 avoids wraparound while removing the old 48 cap.
     public static final int MAX_REQUEST_DISTANCE = 127;
+    public static final int MIN_CREATE_RENDER_DISTANCE = 8;
+    public static final int MAX_CREATE_RENDER_DISTANCE = 127;
     public static final int MAX_CLOUD_DISTANCE = 128;
     public static final float MIN_SUBDIVISION_SIZE = 28.0f;
     public static final float MAX_SUBDIVISION_SIZE = 256.0f;
@@ -66,9 +68,27 @@ public class VoxyConfig {
     public int farPlayerAnimationDistance = 1024;
     public boolean shareFarPlayerPosition = true;
     public boolean enableCreateFarEntityRendering = true;
+    public int createContraptionRenderDistance = 48;
+    public int createTrainRenderDistance = 96;
 
     public int getRequestDistance() {
         return Math.clamp(this.requestDistance, MIN_REQUEST_DISTANCE, MAX_REQUEST_DISTANCE);
+    }
+
+    public int getCreateContraptionRenderDistance() {
+        return Math.clamp(this.createContraptionRenderDistance,
+                MIN_CREATE_RENDER_DISTANCE, MAX_CREATE_RENDER_DISTANCE);
+    }
+
+    public int getCreateTrainRenderDistance() {
+        return Math.clamp(this.createTrainRenderDistance,
+                MIN_CREATE_RENDER_DISTANCE, MAX_CREATE_RENDER_DISTANCE);
+    }
+
+    public int getEffectiveRequestDistance() {
+        return this.enableCreateFarEntityRendering
+                ? Math.max(this.getRequestDistance(), this.getCreateContraptionRenderDistance())
+                : this.getRequestDistance();
     }
 
     public int getFarEntityRenderDistanceBlocks() {
@@ -153,6 +173,8 @@ public class VoxyConfig {
         this.fogDensity = Math.clamp(this.fogDensity, 0.0f, 1.0f);
         this.setLeafLodMode(this.getLeafLodMode());
         this.farPlayerAnimationDistance = Math.clamp(this.farPlayerAnimationDistance, 0, 32768);
+        this.createContraptionRenderDistance = this.getCreateContraptionRenderDistance();
+        this.createTrainRenderDistance = this.getCreateTrainRenderDistance();
     }
 
     public void save() {

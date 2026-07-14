@@ -12,8 +12,9 @@ public abstract class MixinEntityType {
     @Inject(method = "clientTrackingRange", at = @At("RETURN"), cancellable = true)
     private void voxy$extendCreateTrackingRange(CallbackInfoReturnable<Integer> cir) {
         EntityType<?> type = (EntityType<?>) (Object) this;
-        if (CreateFarEntityCompat.shouldExtendServerTracking(type)) {
-            cir.setReturnValue(Math.max(cir.getReturnValue(), CreateFarEntityCompat.TRACKING_DISTANCE_CHUNKS));
+        int configuredDistance = CreateFarEntityCompat.getMaximumTrackingDistance(type);
+        if (configuredDistance > 0) {
+            cir.setReturnValue(Math.max(cir.getReturnValue(), configuredDistance));
         }
     }
 }

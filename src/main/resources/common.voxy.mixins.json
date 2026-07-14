@@ -6,8 +6,11 @@
     "defaultRequire": 1
   },
   "mixins": [
+    "create.MixinCarriageEntityHandler",
+    "minecraft.AccessorChunkMap",
     "minecraft.AccessorPalettedContainerData",
     "minecraft.AccessorPalettedContainer",
+    "minecraft.MixinChunkMapTrackedEntity",
     "minecraft.MixinEntityType",
     "minecraft.MixinWorld"
   ],

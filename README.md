@@ -25,8 +25,11 @@
   Singleplayer can request up to 127 chunks; it stays at 32 while moving to prioritise vanilla terrain, then gradually expands the distant request while stationary.
 
 - **远距离玩家、乘骑物与 Create 动态结构 / Far players, ridden vehicles and Create contraptions**
-  采用 SeeU 风格的轻量玩家快照渲染远距离玩家；马、船等实体仅在玩家实际乘骑时创建代理。单人游戏会把 Create 移动结构、龙门结构与列车车厢的原生追踪范围扩展到 127 区块，保留 Flywheel/Colorwheel 的动画渲染链。
-  Uses SeeU-style snapshots for far players and only creates horse, boat or other vehicle proxies while actually ridden. In singleplayer, Create contraptions and train carriages retain their native Flywheel/Colorwheel rendering with tracking extended to 127 chunks.
+  采用 SeeU 风格的轻量玩家快照渲染远距离玩家；马、船等实体仅在玩家实际乘骑时创建代理。单人游戏会按配置扩展 Create 移动结构、龙门结构与列车车厢的原生追踪范围，保留 Flywheel/Colorwheel 的动画渲染链。
+  Uses SeeU-style snapshots for far players and only creates horse, boat or other vehicle proxies while actually ridden. In singleplayer, Create contraptions and train carriages retain native Flywheel/Colorwheel rendering up to their configured distances.
+  胶粘动态结构在“动态结构距离”内保留实际锚点区块；列车使用独立的“列车距离”，无需把沿途地形区块发送到客户端。
+  Glued contraptions retain their real anchor chunks inside the contraption distance; trains use an independent train distance without sending the terrain chunks along their route.
+  默认配置为 `createContraptionRenderDistance = 48`、`createTrainRenderDistance = 96`，两项范围均为 8–127 区块。
 
   单人游戏自动具备服务端支持；多人游戏的远距离玩家快照要求服务端也安装本版本。若安装独立 SeeU，Voxy 的内置玩家代理会自动停用以避免重复渲染。
   Singleplayer includes the server side automatically; multiplayer far-player snapshots require this version on the server too. The built-in player proxy disables itself when standalone SeeU is installed.

@@ -17,8 +17,13 @@ public abstract class MixinEntity {
             return;
         }
         Entity entity = (Entity) (Object) this;
-        if (CreateFarEntityCompat.isCreateDynamicEntity(entity.getType())
-                && CreateFarEntityCompat.isWithinExtendedDistance(distanceSquared)) {
+        if (!CreateFarEntityCompat.isCreateDynamicEntity(entity.getType())) {
+            return;
+        }
+        int distanceChunks = CreateFarEntityCompat.isCreateTrainEntity(entity.getType())
+                ? VoxyConfig.CONFIG.getCreateTrainRenderDistance()
+                : VoxyConfig.CONFIG.getCreateContraptionRenderDistance();
+        if (CreateFarEntityCompat.isWithinDistance(distanceSquared, distanceChunks)) {
             cir.setReturnValue(true);
         }
     }

@@ -12,14 +12,22 @@ import java.util.List;
 import java.util.UUID;
 
 public final class FarEntityProtocol {
-    public static final int VERSION = 1;
+    public static final int VERSION = 2;
     private static final int MAX_PLAYERS_PER_PACKET = 1024;
     private static final int MAX_STRING_BYTES = 32767;
 
     private FarEntityProtocol() {
     }
 
-    public record Hello(int version, boolean enabled, int maximumDistanceBlocks, boolean shareSelf) {
+    public record Hello(
+            int version,
+            boolean enabled,
+            int maximumDistanceBlocks,
+            boolean shareSelf,
+            boolean createEnabled,
+            int contraptionDistanceChunks,
+            int trainDistanceChunks
+    ) {
     }
 
     public record ItemSnapshot(String itemId, int count) {
@@ -120,10 +128,16 @@ public final class FarEntityProtocol {
         buf.writeBoolean(hello.enabled());
         writeVarInt(buf, hello.maximumDistanceBlocks());
         buf.writeBoolean(hello.shareSelf());
+        buf.writeBoolean(hello.createEnabled());
+        writeVarInt(buf, hello.contraptionDistanceChunks());
+        writeVarInt(buf, hello.trainDistanceChunks());
     }
 
     private static Hello decodeHello(ByteBuf buf) {
-        return new Hello(readVarInt(buf), buf.readBoolean(), readVarInt(buf), buf.readBoolean());
+        return new Hello(
+                readVarInt(buf), buf.readBoolean(), readVarInt(buf), buf.readBoolean(),
+                buf.readBoolean(), readVarInt(buf), readVarInt(buf)
+        );
     }
 
     private static void encodePlayers(ByteBuf buf, PlayerBatch batch) {
