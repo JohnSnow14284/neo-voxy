@@ -8,6 +8,7 @@
   "mixins": [
     "minecraft.AccessorPalettedContainerData",
     "minecraft.AccessorPalettedContainer",
+    "minecraft.MixinEntityType",
     "minecraft.MixinWorld"
   ],
   "overwrites": {

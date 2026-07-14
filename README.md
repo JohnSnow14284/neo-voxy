@@ -24,6 +24,13 @@
   单人游戏最高可请求 127 区块；移动时保持 32 区块以优先刷新原版地形，停止后再逐级扩展远景请求。
   Singleplayer can request up to 127 chunks; it stays at 32 while moving to prioritise vanilla terrain, then gradually expands the distant request while stationary.
 
+- **远距离玩家、乘骑物与 Create 动态结构 / Far players, ridden vehicles and Create contraptions**
+  采用 SeeU 风格的轻量玩家快照渲染远距离玩家；马、船等实体仅在玩家实际乘骑时创建代理。单人游戏会把 Create 移动结构、龙门结构与列车车厢的原生追踪范围扩展到 127 区块，保留 Flywheel/Colorwheel 的动画渲染链。
+  Uses SeeU-style snapshots for far players and only creates horse, boat or other vehicle proxies while actually ridden. In singleplayer, Create contraptions and train carriages retain their native Flywheel/Colorwheel rendering with tracking extended to 127 chunks.
+
+  单人游戏自动具备服务端支持；多人游戏的远距离玩家快照要求服务端也安装本版本。若安装独立 SeeU，Voxy 的内置玩家代理会自动停用以避免重复渲染。
+  Singleplayer includes the server side automatically; multiplayer far-player snapshots require this version on the server too. The built-in player proxy disables itself when standalone SeeU is installed.
+
 - **无光影水体优化 / No-shader water improvements**
   采用直通 Alpha 烘焙、标准 `SRC_ALPHA` 合成和流体面排序，改善关闭光影时远景水体的颜色、透明度、雾中表现与岸线衔接。
   Uses straight-alpha baking, standard `SRC_ALPHA` compositing, and ordered fluid-face submission to improve distant water colour, transparency, fog blending, and shorelines without shaders.
