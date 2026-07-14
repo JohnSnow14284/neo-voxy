@@ -47,7 +47,7 @@
   "voxy.config.fakesight.distance": "请求距离",
   "voxy.config.fakesight.distance.tooltip": "向服务端或集成服务器报告的区块请求距离，最高 48。数值越高，CPU、内存和网络负载越大。",
   "voxy.config.general.leafLodMode": "树叶 LOD 模式",
-  "voxy.config.general.leafLodMode.tooltip": "调节远景树叶的画质与性能。性能模式使用不透明树叶以获得最高性能；平衡模式使用基于 Mip 的镂空树叶，轮廓更自然且减少纹理采样；质量模式保留细小透明孔洞，但 GPU 开销更高。",
+  "voxy.config.general.leafLodMode.tooltip": "调节远景树叶的画质与性能。性能模式使用不透明树叶；平衡模式轻微变化各方向纹理、剔除不可见内部面并使用 Mip 镂空，性能影响为中；质量模式保留细小透明孔洞，但 GPU 开销更高。",
   "voxy.config.general.leafLodMode.fast": "性能",
   "voxy.config.general.leafLodMode.balanced": "平衡",
   "voxy.config.general.leafLodMode.quality": "质量"

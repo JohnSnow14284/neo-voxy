@@ -41,8 +41,8 @@
   Supports Domum dynamic materials, colour mapping, and lightweight proxy geometry for selected complex shapes, with the compatibility path enabled only when Domum is installed.
 
 - **可调树叶 LOD / Configurable leaf LOD**
-  提供性能、平衡和质量三种树叶模式。平衡模式使用 Mip 感知的透明裁剪改善远景树冠轮廓，同时减少一次片元纹理采样。
-  Provides Fast, Balanced, and Quality foliage modes. Balanced mode uses mip-aware alpha cutout for cleaner distant canopies while avoiding one fragment texture lookup.
+  提供性能、平衡和质量三种树叶模式。默认的平衡模式会轻微变化各方向的烘焙纹理、剔除相邻树叶之间不可见的内部面，并使用 Mip 感知透明裁剪改善远景树冠。
+  Provides Fast, Balanced, and Quality foliage modes. The default Balanced mode adds subtle per-face texture variation, removes hidden internal faces between matching leaves, and uses mip-aware alpha cutout for cleaner distant canopies.
 
 - **保存与退出稳定性 / Save and shutdown reliability**
   优化区块保存、卸载竞争与世界关闭顺序，降低退出世界时卡住或存储未完全释放的概率。

@@ -64,6 +64,7 @@ import static org.lwjgl.opengl.GL11.*;
 public class ModelFactory {
     public static final int MODEL_TEXTURE_SIZE = 16;
     public static final int LAYERS = Integer.numberOfTrailingZeros(MODEL_TEXTURE_SIZE);
+    private static final int[] BALANCED_LEAF_FACE_MIRRORS = { 1, 2, 0, 1, 2, 3 };
 
     //TODO: replace the fluid BlockState with a client model id integer of the fluidState, requires looking up
     // the fluid state in the mipper
@@ -382,6 +383,12 @@ public class ModelFactory {
         //TODO: add thing for `blockState.hasEmissiveLighting()` and `blockState.getLuminance()`
 
         boolean isFluid = isFluidBlockState(blockState);
+        boolean balancedLeaf = isLeafBlockState(blockState)
+                && VoxyConfig.CONFIG.getLeafLodMode() == VoxyConfig.LeafLodMode.BALANCED;
+        if (balancedLeaf) {
+            varyBalancedLeafFaces(textureData);
+        }
+
         int modelId = -1;
 
 
@@ -501,6 +508,9 @@ public class ModelFactory {
             if (allTrue) {
                 cullsSame = true;
             }
+        }
+        if (balancedLeaf) {
+            cullsSame = true;
         }
 
 
@@ -627,8 +637,7 @@ public class ModelFactory {
         //TODO: THIS
         modelFlags |= isShaded?8:0;//model has AO and shade
         modelFlags |= isFluid?16:0;//Allows coarse LOD fluid tops to use the dimension fluid datum
-        modelFlags |= (blockState.is(BlockTags.LEAVES) || blockState.getBlock() instanceof LeavesBlock)
-                && VoxyConfig.CONFIG.getLeafLodMode() == VoxyConfig.LeafLodMode.BALANCED ? 32 : 0;
+        modelFlags |= balancedLeaf ? 32 : 0;
 
         //modelFlags |= blockRenderLayer == RenderLayer.getSolid()?0:1;// should discard alpha
         MemoryUtil.memPutInt(uploadPtr, modelFlags); uploadPtr += 4;
@@ -817,6 +826,41 @@ public class ModelFactory {
             return (state, world, pos, tintIndex) -> blockColors.getColor(state, world, pos, tintIndex);
         }
         return null;
+    }
+
+    public static boolean isLeafBlockState(BlockState state) {
+        return state.is(BlockTags.LEAVES) || state.getBlock() instanceof LeavesBlock;
+    }
+
+    private static void varyBalancedLeafFaces(ColourDepthTextureData[] faces) {
+        for (int face = 0; face < faces.length; face++) {
+            int mirror = BALANCED_LEAF_FACE_MIRRORS[face];
+            if (mirror != 0) {
+                faces[face] = mirrorFace(faces[face], mirror);
+            }
+        }
+    }
+
+    private static ColourDepthTextureData mirrorFace(ColourDepthTextureData source, int mirror) {
+        int width = source.width();
+        int height = source.height();
+        int[] sourceColour = source.colour();
+        int[] sourceDepth = source.depth();
+        int[] colour = new int[sourceColour.length];
+        int[] depth = new int[sourceDepth.length];
+
+        for (int y = 0; y < height; y++) {
+            int sourceY = (mirror & 2) == 0 ? y : height - 1 - y;
+            for (int x = 0; x < width; x++) {
+                int sourceX = (mirror & 1) == 0 ? x : width - 1 - x;
+                int sourceIndex = sourceY * width + sourceX;
+                int targetIndex = y * width + x;
+                colour[targetIndex] = sourceColour[sourceIndex];
+                depth[targetIndex] = sourceDepth[sourceIndex];
+            }
+        }
+
+        return new ColourDepthTextureData(colour, depth, width, height);
     }
 
     public static boolean isFluidBlockState(BlockState state) {

@@ -15,12 +15,10 @@ import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.BlockAndTintGetter;
 import net.minecraft.world.level.ColorResolver;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -315,7 +313,7 @@ public class SoftwareModelTextureBakery {
         boolean forceSolidLeaves = false;
         if (!isBlock) {
             blockRenderLayer = ItemBlockRenderTypes.getRenderLayer(state.getFluidState());
-        } else if (state.is(BlockTags.LEAVES) || state.getBlock() instanceof LeavesBlock) {
+        } else if (ModelFactory.isLeafBlockState(state)) {
             var leafMode = VoxyConfig.CONFIG.getLeafLodMode();
             forceSolidLeaves = leafMode == VoxyConfig.LeafLodMode.FAST;
             blockRenderLayer = forceSolidLeaves ? RenderType.solid() : RenderType.cutout();
