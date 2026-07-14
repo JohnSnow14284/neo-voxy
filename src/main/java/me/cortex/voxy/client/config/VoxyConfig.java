@@ -19,6 +19,12 @@ import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 
 public class VoxyConfig {
+    public enum LeafLodMode {
+        FAST,
+        BALANCED,
+        QUALITY
+    }
+
     public static final int MIN_REQUEST_DISTANCE = 8;
     public static final int MAX_REQUEST_DISTANCE = 48;
     public static final int MAX_CLOUD_DISTANCE = 128;
@@ -52,6 +58,7 @@ public class VoxyConfig {
     public int requestDistance = 48;
     public String ssaoMode;
     public boolean useEnvironmentalFog = true;
+    public String leafLodMode = "balanced";
 
     public int getRequestDistance() {
         return Math.clamp(this.requestDistance, MIN_REQUEST_DISTANCE, MAX_REQUEST_DISTANCE);
@@ -62,6 +69,22 @@ public class VoxyConfig {
             this.renderPressure = 2;
         }
         return this.renderPressure;
+    }
+
+    public LeafLodMode getLeafLodMode() {
+        if (this.leafLodMode == null) {
+            return LeafLodMode.BALANCED;
+        }
+
+        try {
+            return LeafLodMode.valueOf(this.leafLodMode.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ignored) {
+            return LeafLodMode.BALANCED;
+        }
+    }
+
+    public void setLeafLodMode(LeafLodMode mode) {
+        this.leafLodMode = mode.name().toLowerCase(Locale.ROOT);
     }
 
     public SSAO.SSAOMode getSSAOMode() {
@@ -117,6 +140,7 @@ public class VoxyConfig {
         this.cloudDistance = Math.clamp(this.cloudDistance, 0, MAX_CLOUD_DISTANCE);
         this.fogIntensity = Math.clamp(this.fogIntensity, 0.0f, 1.0f);
         this.fogDensity = Math.clamp(this.fogDensity, 0.0f, 1.0f);
+        this.setLeafLodMode(this.getLeafLodMode());
     }
 
     public void save() {

@@ -45,5 +45,10 @@
   "voxy.config.fakesight.enabled": "Enable extended chunk request",
   "voxy.config.fakesight.enabled.tooltip": "FakeSight-style support: reports a larger view/request distance so the server sends more chunks for Voxy LOD ingestion.",
   "voxy.config.fakesight.distance": "Request distance",
-  "voxy.config.fakesight.distance.tooltip": "Chunk distance reported to the server or integrated server. Maximum: 48. Higher values increase CPU, memory and network load."
+  "voxy.config.fakesight.distance.tooltip": "Chunk distance reported to the server or integrated server. Maximum: 48. Higher values increase CPU, memory and network load.",
+  "voxy.config.general.leafLodMode": "Leaf LOD mode",
+  "voxy.config.general.leafLodMode.tooltip": "Controls distant leaf rendering. Fast uses opaque foliage for maximum performance. Balanced uses mip-aware cutout foliage for cleaner silhouettes and fewer texture samples. Quality preserves fine cutout detail at higher GPU cost.",
+  "voxy.config.general.leafLodMode.fast": "Fast",
+  "voxy.config.general.leafLodMode.balanced": "Balanced",
+  "voxy.config.general.leafLodMode.quality": "Quality"
 }

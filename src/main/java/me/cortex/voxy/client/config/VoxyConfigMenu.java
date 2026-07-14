@@ -130,7 +130,17 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                                         ()->CFG.getRenderPressureLevel(), v->CFG.renderPressure=v,
                                         new Range(0, 4, 1))
                                         .setFormatter(v->Component.translatable("voxy.config.general.renderPressure." + v))
-                                        .setImpact(OptionImpact.HIGH)
+                                        .setImpact(OptionImpact.HIGH),
+                                new EnumOption<>(
+                                        "voxy:leaf_lod_mode",
+                                        VoxyConfig.LeafLodMode.class,
+                                        Component.translatable("voxy.config.general.leafLodMode"),
+                                        CFG::getLeafLodMode,
+                                        CFG::setLeafLodMode)
+                                        .setNameProvider(mode -> Component.translatable(
+                                                "voxy.config.general.leafLodMode." + mode.name().toLowerCase(java.util.Locale.ROOT)))
+                                        .setPostChangeFlags(RENDER_RELOAD)
+                                        .setImpact(OptionImpact.MEDIUM)
                         ), new Group(
                                 new BoolOption(
                                     "voxy:environmental_fog",

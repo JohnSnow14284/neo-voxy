@@ -1,5 +1,6 @@
 package me.cortex.voxy.client.core.model;
 
+import me.cortex.voxy.client.config.VoxyConfig;
 import me.cortex.voxy.commonImpl.compat.DomumOrnamentumCompat;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
@@ -263,11 +264,6 @@ public class ModelFactory {
         } else {
             layer = RenderType.solid();
         }
-        if (bake.state.is(BlockTags.LEAVES)) {
-            layer = RenderType.solid();
-        }
-
-
         boolean centeredGroundCross = (flags & SoftwareModelTextureBakery.FLAG_CENTERED_GROUND_CROSS) != 0;
         var bakeResult = this.processTextureBakeResult(
                 bake.blockId, bake.state, textureData, isShaded, hasDarkenedTextures, layer, centeredGroundCross);
@@ -631,6 +627,8 @@ public class ModelFactory {
         //TODO: THIS
         modelFlags |= isShaded?8:0;//model has AO and shade
         modelFlags |= isFluid?16:0;//Allows coarse LOD fluid tops to use the dimension fluid datum
+        modelFlags |= (blockState.is(BlockTags.LEAVES) || blockState.getBlock() instanceof LeavesBlock)
+                && VoxyConfig.CONFIG.getLeafLodMode() == VoxyConfig.LeafLodMode.BALANCED ? 32 : 0;
 
         //modelFlags |= blockRenderLayer == RenderLayer.getSolid()?0:1;// should discard alpha
         MemoryUtil.memPutInt(uploadPtr, modelFlags); uploadPtr += 4;

@@ -1,5 +1,7 @@
 package me.cortex.voxy.client.core.model.bakery;
 
+import me.cortex.voxy.client.config.VoxyConfig;
+
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -85,7 +87,7 @@ public class SoftwareModelTextureBakery {
 
     public static final int FLAG_CENTERED_GROUND_CROSS = 1 << 4;
 
-    private boolean bakeBlockModel(int blockId, BlockState state, RenderType layer) {
+    private boolean bakeBlockModel(int blockId, BlockState state, RenderType layer, boolean forceSolidLeaves) {
         if (state.getRenderShape() == RenderShape.INVISIBLE) {
             return false;
         }
@@ -129,7 +131,7 @@ public class SoftwareModelTextureBakery {
                 }
 
                 (layer == RenderType.translucent() ? this.translucentVC : this.opaqueVC)
-                        .quad(quad, modelState.is(BlockTags.LEAVES), layer, modelState);
+                        .quad(quad, forceSolidLeaves, layer, modelState);
             }
         }
 
@@ -309,15 +311,16 @@ public class SoftwareModelTextureBakery {
 
         boolean isBlock = !ModelFactory.isFluidBlockState(state);
 
-        RenderType blockRenderLayer = null;
+        RenderType blockRenderLayer;
+        boolean forceSolidLeaves = false;
         if (!isBlock) {
             blockRenderLayer = ItemBlockRenderTypes.getRenderLayer(state.getFluidState());
+        } else if (state.is(BlockTags.LEAVES) || state.getBlock() instanceof LeavesBlock) {
+            var leafMode = VoxyConfig.CONFIG.getLeafLodMode();
+            forceSolidLeaves = leafMode == VoxyConfig.LeafLodMode.FAST;
+            blockRenderLayer = forceSolidLeaves ? RenderType.solid() : RenderType.cutout();
         } else {
-            if (state.getBlock() instanceof LeavesBlock) {
-                blockRenderLayer = RenderType.solid();
-            } else {
-                blockRenderLayer = ItemBlockRenderTypes.getChunkRenderType(state);
-            }
+            blockRenderLayer = ItemBlockRenderTypes.getChunkRenderType(state);
         }
 
         boolean isAnyShaded = false;
@@ -328,7 +331,7 @@ public class SoftwareModelTextureBakery {
         if (isBlock) {
             this.opaqueVC.reset();
             this.translucentVC.reset();
-            centeredGroundCross = this.bakeBlockModel(blockId, state, blockRenderLayer);
+            centeredGroundCross = this.bakeBlockModel(blockId, state, blockRenderLayer, forceSolidLeaves);
             isAnyShaded |= this.opaqueVC.anyShaded | this.translucentVC.anyShaded;
             isAnyDarkened |= this.opaqueVC.anyDarkendTex | this.translucentVC.anyDarkendTex;
             anyTranslucent |= !this.translucentVC.isEmpty();

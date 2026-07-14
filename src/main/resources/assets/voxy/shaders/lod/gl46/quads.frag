@@ -74,6 +74,10 @@ bool useDiscard() {
     return (interData.x&1u)==1u;
 }
 
+bool useBalancedLeafCutout() {
+    return ((interData.x >> 1u) & 1u) == 1u;
+}
+
 uint getFace() {
     return (interData.x>>4)&7u;
 }
@@ -177,9 +181,12 @@ void main() {
 
     //Also, small quad is really fking over the mipping level somehow
     #ifndef TRANSLUCENT
+    float cutoutAlpha = useBalancedLeafCutout()
+            ? colour.a
+            : textureLod(blockModelAtlas, texPos, 0).a;
+    float cutoutThreshold = useBalancedLeafCutout() ? 0.42f : 0.1f;
     colour.a = 1.0f;
-    if (useDiscard() && (textureLod(blockModelAtlas, texPos, 0).a <= 0.1f)) {
-    //if (useDiscard() && (colour.a <= 0.1f)) {
+    if (useDiscard() && cutoutAlpha <= cutoutThreshold) {
     #else
     if (textureLod(blockModelAtlas, texPos, 0).a == 0.0f) {
     #endif

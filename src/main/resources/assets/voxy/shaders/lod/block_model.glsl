@@ -46,3 +46,7 @@ bool modelIsShaded(BlockModel model) {
 bool modelUsesFluidDatum(BlockModel model) {
     return ((model.flagsA)&16u) != 0;
 }
+
+bool modelUsesBalancedLeafCutout(BlockModel model) {
+    return ((model.flagsA)&32u) != 0;
+}

@@ -40,6 +40,10 @@
   支持 Domum 动态材质、颜色映射与部分复杂外形的轻量代理模型，并仅在检测到 Domum 时启用相关逻辑。
   Supports Domum dynamic materials, colour mapping, and lightweight proxy geometry for selected complex shapes, with the compatibility path enabled only when Domum is installed.
 
+- **可调树叶 LOD / Configurable leaf LOD**
+  提供性能、平衡和质量三种树叶模式。平衡模式使用 Mip 感知的透明裁剪改善远景树冠轮廓，同时减少一次片元纹理采样。
+  Provides Fast, Balanced, and Quality foliage modes. Balanced mode uses mip-aware alpha cutout for cleaner distant canopies while avoiding one fragment texture lookup.
+
 - **保存与退出稳定性 / Save and shutdown reliability**
   优化区块保存、卸载竞争与世界关闭顺序，降低退出世界时卡住或存储未完全释放的概率。
   Improves section saving, unload races, and world shutdown ordering to reduce hangs and incomplete storage cleanup when leaving a world.
@@ -86,13 +90,8 @@ Neo-Voxy no longer requires Forgified Fabric API as a separate mandatory prerequ
   Old Domum Ornamentum cache data may not contain dynamic material metadata; clearing the affected world's old Voxy cache is recommended when testing the new compatibility path.
 - 光影兼容性取决于 Iris、Sodium、光影包及其他渲染模组的组合。
   Shader compatibility depends on the combination of Iris, Sodium, the shader pack, and other rendering mods.
-
----
-
-## 后续计划 / Roadmap
-
-- 改进树叶在远距离 LOD 中的轮廓、透明边缘与颜色表现，同时避免明显增加模型烘焙和运行时开销。
-  Improve distant leaf LOD silhouettes, transparent edges, and colour quality without materially increasing model-baking or runtime cost.
+- 修改树叶 LOD 模式会自动重载 Voxy 渲染器，不需要删除世界 LOD 缓存。
+  Changing the leaf LOD mode reloads the Voxy renderer and does not require deleting the world's LOD cache.
 
 ---
 
