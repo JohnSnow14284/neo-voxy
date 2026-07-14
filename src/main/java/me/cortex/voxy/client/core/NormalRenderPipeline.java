@@ -79,7 +79,8 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
             glTextureParameterf(this.fb.getDepthTex().id, GL_DEPTH_STENCIL_TEXTURE_MODE, GL_DEPTH_COMPONENT);
         }
 
-        this.initDepthStencil(sourceFB, this.fb.framebuffer.id, viewport.width, viewport.height, viewport.width, viewport.height);
+        this.initDepthStencil(viewport, sourceFB, this.fb.framebuffer.id,
+                viewport.width, viewport.height, viewport.width, viewport.height, false);
 
         return this.fb.getDepthTex().id;
     }

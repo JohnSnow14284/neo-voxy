@@ -24,7 +24,7 @@
   "voxy.config.general.renderPressure.3": "Fast catch-up",
   "voxy.config.general.renderPressure.4": "Maximum catch-up",
   "voxy.config.general.lodBoundaryFade": "Fade vanilla/LOD boundary",
-  "voxy.config.general.lodBoundaryFade.tooltip": "Blends Voxy into the moving edge of vanilla chunks with a shader-safe dithered overlap instead of a hard transition.",
+  "voxy.config.general.lodBoundaryFade.tooltip": "Draws a player-centred circular overlap that smoothly hands vanilla chunks inside the circle to Voxy LOD terrain outside it.",
   "voxy.config.general.lodBoundaryOverdraw": "LOD boundary overdraw",
   "voxy.config.general.lodBoundaryOverdraw.tooltip": "Fully visible overlap kept inside the vanilla render distance. Photon-style default: 16 blocks.",
   "voxy.config.general.lodBoundaryFadeLength": "LOD boundary fade length",

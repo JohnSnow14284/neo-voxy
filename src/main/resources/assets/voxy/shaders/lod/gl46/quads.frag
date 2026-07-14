@@ -149,7 +149,11 @@ vec4 computeColour(vec2 texturePos, vec4 colour) {
 
 float getLodBoundaryFade() {
     if (lodBoundaryFadeEnd <= lodBoundaryFadeStart) return 1.0f;
-    return smoothstep(lodBoundaryFadeStart, lodBoundaryFadeEnd, length(relativeWorldPos.xz));
+    // Quad positions are relative to the current 32-block base section. Remove
+    // the camera's sub-section offset to keep the circle centred on the player
+    // and moving continuously instead of snapping at section boundaries.
+    vec2 cameraRelativePos = relativeWorldPos.xz - cameraSubPos.xz;
+    return smoothstep(lodBoundaryFadeStart, lodBoundaryFadeEnd, length(cameraRelativePos));
 }
 
 float lodBoundaryDither(ivec2 pixelPos) {
