@@ -57,6 +57,21 @@ public final class VoxyNeoForgeConfig {
                      "0 = exact match (may have gaps), 1 = minimal overlap, 2-4 = smoother for fast flight")
             .defineInRange("lodBoundaryBuffer", 1, 0, 4);
 
+    private static final ModConfigSpec.BooleanValue ENABLE_LOD_BOUNDARY_FADE = BUILDER
+            .comment("Blend Voxy LOD terrain into the edge of vanilla terrain.",
+                     "Uses a shader-safe dithered overlap similar to Photon's distant-terrain transition.")
+            .define("enableLodBoundaryFade", true);
+
+    private static final ModConfigSpec.IntValue LOD_BOUNDARY_OVERDRAW_DISTANCE = BUILDER
+            .comment("Fully visible overlap between vanilla terrain and Voxy LODs, in blocks.",
+                     "The default mirrors Photon's 16-block distant-terrain overdraw.")
+            .defineInRange("lodBoundaryOverdrawDistance", 16, 0, 64);
+
+    private static final ModConfigSpec.IntValue LOD_BOUNDARY_FADE_LENGTH = BUILDER
+            .comment("Length of the vanilla-to-Voxy dithered fade band, in blocks.",
+                     "The default mirrors Photon's 16-block distant-terrain fade.")
+            .defineInRange("lodBoundaryFadeLength", 16, 0, 64);
+
     private static final ModConfigSpec.IntValue EARTH_CURVE_RATIO = BUILDER
             .comment("World curvature effect - simulates standing on a spherical planet",
                      "0 = disabled (flat world)",
@@ -120,6 +135,9 @@ public final class VoxyNeoForgeConfig {
         VoxyConfig.CONFIG.useEnvironmentalFog = USE_ENVIRONMENTAL_FOG.get();
         VoxyConfig.CONFIG.dontUseSodiumBuilderThreads = DONT_USE_SODIUM_BUILDER_THREADS.get();
         VoxyConfig.CONFIG.lodBoundaryBuffer = LOD_BOUNDARY_BUFFER.get();
+        VoxyConfig.CONFIG.enableLodBoundaryFade = ENABLE_LOD_BOUNDARY_FADE.get();
+        VoxyConfig.CONFIG.lodBoundaryOverdrawDistance = LOD_BOUNDARY_OVERDRAW_DISTANCE.get();
+        VoxyConfig.CONFIG.lodBoundaryFadeLength = LOD_BOUNDARY_FADE_LENGTH.get();
         VoxyConfig.CONFIG.earthCurveRatio = EARTH_CURVE_RATIO.get();
         VoxyConfig.CONFIG.enableExtendedRequestDistance = ENABLE_EXTENDED_REQUEST_DISTANCE.get();
         VoxyConfig.CONFIG.requestDistance = REQUEST_DISTANCE.get();
@@ -145,6 +163,9 @@ public final class VoxyNeoForgeConfig {
         USE_ENVIRONMENTAL_FOG.set(VoxyConfig.CONFIG.useEnvironmentalFog);
         DONT_USE_SODIUM_BUILDER_THREADS.set(VoxyConfig.CONFIG.dontUseSodiumBuilderThreads);
         LOD_BOUNDARY_BUFFER.set(VoxyConfig.CONFIG.lodBoundaryBuffer);
+        ENABLE_LOD_BOUNDARY_FADE.set(VoxyConfig.CONFIG.enableLodBoundaryFade);
+        LOD_BOUNDARY_OVERDRAW_DISTANCE.set(VoxyConfig.CONFIG.lodBoundaryOverdrawDistance);
+        LOD_BOUNDARY_FADE_LENGTH.set(VoxyConfig.CONFIG.lodBoundaryFadeLength);
         EARTH_CURVE_RATIO.set(VoxyConfig.CONFIG.earthCurveRatio);
         ENABLE_EXTENDED_REQUEST_DISTANCE.set(VoxyConfig.CONFIG.enableExtendedRequestDistance);
         REQUEST_DISTANCE.set(VoxyConfig.CONFIG.requestDistance);

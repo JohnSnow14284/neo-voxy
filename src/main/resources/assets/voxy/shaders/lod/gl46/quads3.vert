@@ -29,6 +29,7 @@ layout(location = 0) out flat uvec4 interData;
 #ifndef USE_NV_BARRY
 layout(location = 1) out vec2 uv;
 #endif
+layout(location = 2) out vec3 relativeWorldPos;
 
 #ifdef USE_NV_JANK
 #ifdef GL_NV_gpu_shader5
@@ -56,13 +57,14 @@ void main() {
 
     uint cornerId = gl_VertexID&3;
 
+    relativeWorldPos = getQuadCornerWorldPos(quad, cornerId);
     gl_Position =
     #ifdef USE_NV_JANK
     #ifdef GL_NV_gpu_shader5
     f16vec4
     #endif
     #endif
-    (getQuadCornerPos(quad, cornerId));
+    (projectQuadCorner(relativeWorldPos));
 
 
     #ifndef USE_NV_BARRY

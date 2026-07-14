@@ -138,6 +138,27 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                                         new Range(0, 4, 1))
                                         .setFormatter(v->Component.translatable("voxy.config.general.renderPressure." + v))
                                         .setImpact(OptionImpact.HIGH),
+                                new BoolOption(
+                                        "voxy:lod_boundary_fade",
+                                        Component.translatable("voxy.config.general.lodBoundaryFade"),
+                                        ()->CFG.enableLodBoundaryFade, v->CFG.enableLodBoundaryFade=v)
+                                        .setImpact(OptionImpact.LOW),
+                                new IntOption(
+                                        "voxy:lod_boundary_overdraw",
+                                        Component.translatable("voxy.config.general.lodBoundaryOverdraw"),
+                                        ()->CFG.lodBoundaryOverdrawDistance, v->CFG.lodBoundaryOverdrawDistance=v,
+                                        new Range(0, 64, 1))
+                                        .setFormatter(v->Component.literal(v + " blocks"))
+                                        .setImpact(OptionImpact.MEDIUM)
+                                        .setEnabler("voxy:lod_boundary_fade"),
+                                new IntOption(
+                                        "voxy:lod_boundary_fade_length",
+                                        Component.translatable("voxy.config.general.lodBoundaryFadeLength"),
+                                        ()->CFG.lodBoundaryFadeLength, v->CFG.lodBoundaryFadeLength=v,
+                                        new Range(0, 64, 1))
+                                        .setFormatter(v->Component.literal(v + " blocks"))
+                                        .setImpact(OptionImpact.LOW)
+                                        .setEnabler("voxy:lod_boundary_fade"),
                                 new EnumOption<>(
                                         "voxy:leaf_lod_mode",
                                         VoxyConfig.LeafLodMode.class,

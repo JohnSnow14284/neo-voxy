@@ -4,6 +4,9 @@ layout(binding = 0, std140) uniform SceneUniform {
     uint frameId;
     vec3 cameraSubPos;
     float fluidDatumY;
+    float lodBoundaryFadeStart;
+    float lodBoundaryFadeEnd;
+    vec2 scenePadding;
 };
 
 //TODO: see if making the stride 2*4*4 bytes or something cause you get that 16 byte write
@@ -92,4 +95,3 @@ layout(binding = POSITION_SCRATCH_BINDING, std430) POSITION_SCRATCH_ACCESS restr
     uvec2 positionBuffer[];
 };
 #endif
-

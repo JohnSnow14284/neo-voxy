@@ -21,6 +21,7 @@ layout(location = 0) in flat uvec4 interData;
 #ifndef USE_NV_BARRY
 layout(location = 1) in vec2 uv;
 #endif
+layout(location = 2) in vec3 relativeWorldPos;
 
 #ifdef DEBUG_RENDER
 layout(location = 7) in flat uint quadDebug;
@@ -124,6 +125,7 @@ struct VoxyFragmentParameters {
     vec2 lightMap;
     vec4 tinting;
     uint customId;//Same as iris's modelId
+    float lodBoundaryFade;
 };
 
 void voxy_emitFragment(VoxyFragmentParameters parameters);
@@ -144,6 +146,20 @@ vec4 computeColour(vec2 texturePos, vec4 colour) {
 }
 
 #endif
+
+float getLodBoundaryFade() {
+    if (lodBoundaryFadeEnd <= lodBoundaryFadeStart) return 1.0f;
+    return smoothstep(lodBoundaryFadeStart, lodBoundaryFadeEnd, length(relativeWorldPos.xz));
+}
+
+float lodBoundaryDither(ivec2 pixelPos) {
+    uint hash = uint(pixelPos.x) * 0x8da6b343u;
+    hash ^= uint(pixelPos.y) * 0xd8163841u;
+    hash ^= hash >> 16u;
+    hash *= 0x7feb352du;
+    hash ^= hash >> 15u;
+    return float(hash & 0xffffu) / 65535.0f;
+}
 
 
 void main() {
@@ -239,6 +255,12 @@ void main() {
     }
     #endif
 
+    float lodBoundaryFade = getLodBoundaryFade();
+    if (lodBoundaryDither(ivec2(gl_FragCoord.xy)) > lodBoundaryFade) {
+        discard;
+        return;
+    }
+
     #ifndef PATCHED_SHADER
     colour = computeColour(texPos, colour);
     outColour = colour;
@@ -267,7 +289,7 @@ void main() {
 
     uint face = getFace();
     face ^= uint((face&1u)!=uint(gl_FrontFacing!=((face>>1)!=0u)));
-    voxy_emitFragment(VoxyFragmentParameters(colour, tile, texPos, face, modelId, getLightmapUv(interData.y), tint, model.customId));
+    voxy_emitFragment(VoxyFragmentParameters(colour, tile, texPos, face, modelId, getLightmapUv(interData.y), tint, model.customId, lodBoundaryFade));
 
     #endif
 }
@@ -300,4 +322,3 @@ colour = textureGrad(blockModelAtlas, texPos, dx, dy);
 
 //Undefine the depth stuff
 #import <voxy:util/depthutils.glsl>
-
