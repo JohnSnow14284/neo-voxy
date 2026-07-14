@@ -96,24 +96,6 @@ public final class VoxyNeoForgeConfig {
             .comment("Allow other Voxy clients on the same server to receive your far-player snapshot.")
             .define("shareFarPlayerPosition", true);
 
-    private static final ModConfigSpec.BooleanValue ENABLE_CREATE_FAR_ENTITY_RENDERING = BUILDER
-            .comment("Enable far rendering for Create glued contraptions and train carriages.",
-                     "Rendering remains handled by Create/Flywheel/Colorwheel.")
-            .define("enableCreateFarEntityRendering", true);
-
-    private static final ModConfigSpec.IntValue CREATE_CONTRAPTION_RENDER_DISTANCE = BUILDER
-            .comment("Create glued-contraption render distance in chunks.",
-                     "Moving keeps the normal 32-chunk sliding window; after stopping it expands to this distance.",
-                     "Active contraption anchors also receive temporary runtime tickets.")
-            .defineInRange("createContraptionRenderDistance", 48,
-                    VoxyConfig.MIN_CREATE_RENDER_DISTANCE, VoxyConfig.MAX_CREATE_RENDER_DISTANCE);
-
-    private static final ModConfigSpec.IntValue CREATE_TRAIN_RENDER_DISTANCE = BUILDER
-            .comment("Create train render distance in chunks.",
-                     "Train entities are tracked independently; their surrounding terrain is not requested for this setting.")
-            .defineInRange("createTrainRenderDistance", 96,
-                    VoxyConfig.MIN_CREATE_RENDER_DISTANCE, VoxyConfig.MAX_CREATE_RENDER_DISTANCE);
-
     private static final ModConfigSpec.BooleanValue RENDER_STATISTICS = BUILDER
             .comment("Show render statistics in F3 debug screen",
                      "Displays LOD traversal counts, visible sections, and quad counts")
@@ -145,9 +127,6 @@ public final class VoxyNeoForgeConfig {
         VoxyConfig.CONFIG.renderFarPlayerNames = RENDER_FAR_PLAYER_NAMES.get();
         VoxyConfig.CONFIG.farPlayerAnimationDistance = FAR_PLAYER_ANIMATION_DISTANCE.get();
         VoxyConfig.CONFIG.shareFarPlayerPosition = SHARE_FAR_PLAYER_POSITION.get();
-        VoxyConfig.CONFIG.enableCreateFarEntityRendering = ENABLE_CREATE_FAR_ENTITY_RENDERING.get();
-        VoxyConfig.CONFIG.createContraptionRenderDistance = CREATE_CONTRAPTION_RENDER_DISTANCE.get();
-        VoxyConfig.CONFIG.createTrainRenderDistance = CREATE_TRAIN_RENDER_DISTANCE.get();
         VoxyConfig.CONFIG.sanitize();
 
         RenderStatistics.enabled = RENDER_STATISTICS.get();
@@ -173,9 +152,6 @@ public final class VoxyNeoForgeConfig {
         RENDER_FAR_PLAYER_NAMES.set(VoxyConfig.CONFIG.renderFarPlayerNames);
         FAR_PLAYER_ANIMATION_DISTANCE.set(VoxyConfig.CONFIG.farPlayerAnimationDistance);
         SHARE_FAR_PLAYER_POSITION.set(VoxyConfig.CONFIG.shareFarPlayerPosition);
-        ENABLE_CREATE_FAR_ENTITY_RENDERING.set(VoxyConfig.CONFIG.enableCreateFarEntityRendering);
-        CREATE_CONTRAPTION_RENDER_DISTANCE.set(VoxyConfig.CONFIG.createContraptionRenderDistance);
-        CREATE_TRAIN_RENDER_DISTANCE.set(VoxyConfig.CONFIG.createTrainRenderDistance);
 
         RenderStatistics.enabled = RENDER_STATISTICS.get();
     }

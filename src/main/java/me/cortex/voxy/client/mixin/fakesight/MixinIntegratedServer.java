@@ -29,14 +29,12 @@ public abstract class MixinIntegratedServer {
             index = 1
     )
     private int voxy$modifyIntegratedServerRenderDistance(int originalDistance) {
-        if ((!VoxyConfig.CONFIG.enableExtendedRequestDistance
-                && !VoxyConfig.CONFIG.enableCreateFarEntityRendering)
-                || !VoxyConfig.CONFIG.isRenderingEnabled()) {
+        if (!VoxyConfig.CONFIG.enableExtendedRequestDistance || !VoxyConfig.CONFIG.isRenderingEnabled()) {
             this.voxy$resetExtendedDistanceState();
             return originalDistance;
         }
 
-        int requestedDistance = VoxyConfig.CONFIG.getEffectiveRequestDistance();
+        int requestedDistance = VoxyConfig.CONFIG.getRequestDistance();
         int movingDistance = Math.min(requestedDistance, VOXY_MOVING_DISTANCE);
         var server = (IntegratedServer) (Object) this;
         var players = server.getPlayerList().getPlayers();

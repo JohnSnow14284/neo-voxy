@@ -1,6 +1,5 @@
 package me.cortex.voxy.compat.far;
 
-import me.cortex.voxy.compat.create.CreateFarEntityCompat;
 import me.cortex.voxy.compat.far.FarEntityProtocol.Hello;
 import me.cortex.voxy.compat.far.FarEntityProtocol.ItemSnapshot;
 import me.cortex.voxy.compat.far.FarEntityProtocol.PlayerBatch;
@@ -14,7 +13,6 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
-import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
@@ -33,13 +31,8 @@ public final class FarEntityService {
     public void handleHello(ServerPlayer player, Hello hello) {
         if (hello.version() != FarEntityProtocol.VERSION) {
             this.subscribers.remove(player.getUUID());
-            CreateFarEntityCompat.removePlayerSettings(player.getUUID());
             return;
         }
-        CreateFarEntityCompat.updatePlayerSettings(
-                player.getUUID(), hello.createEnabled(),
-                hello.contraptionDistanceChunks(), hello.trainDistanceChunks()
-        );
         this.subscribers.put(player.getUUID(), new ClientSettings(
                 hello.enabled(),
                 Math.clamp(hello.maximumDistanceBlocks(), 64, MAX_DISTANCE_BLOCKS),
@@ -49,27 +42,17 @@ public final class FarEntityService {
 
     public void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         this.subscribers.remove(event.getEntity().getUUID());
-        CreateFarEntityCompat.removePlayerSettings(event.getEntity().getUUID());
     }
 
     public void onServerTick(ServerTickEvent.Post event) {
         this.tick(event.getServer());
     }
 
-    public void onServerStopping(ServerStoppingEvent event) {
-        CreateFarEntityCompat.clearContraptionTickets(event.getServer());
-        this.subscribers.clear();
-    }
-
     private void tick(MinecraftServer server) {
-        if (++this.tickCounter < UPDATE_INTERVAL_TICKS) {
+        if (this.subscribers.isEmpty() || ++this.tickCounter < UPDATE_INTERVAL_TICKS) {
             return;
         }
         this.tickCounter = 0;
-        CreateFarEntityCompat.tickContraptionTickets(server);
-        if (this.subscribers.isEmpty()) {
-            return;
-        }
         List<ServerPlayer> players = server.getPlayerList().getPlayers();
         for (ServerPlayer viewer : players) {
             ClientSettings settings = this.subscribers.get(viewer.getUUID());

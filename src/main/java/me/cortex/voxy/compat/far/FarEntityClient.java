@@ -56,16 +56,11 @@ public final class FarEntityClient {
         if (minecraft.getConnection() == null) {
             return;
         }
-        boolean createEnabled = VoxyConfig.CONFIG.enableCreateFarEntityRendering
-                && VoxyConfig.CONFIG.isRenderingEnabled();
         PacketDistributor.sendToServer(new FarEntityProtocol.HelloPayload(new FarEntityProtocol.Hello(
                 FarEntityProtocol.VERSION,
                 isEnabled(),
                 VoxyConfig.CONFIG.getFarEntityRenderDistanceBlocks(),
-                VoxyConfig.CONFIG.shareFarPlayerPosition,
-                createEnabled,
-                VoxyConfig.CONFIG.getCreateContraptionRenderDistance(),
-                VoxyConfig.CONFIG.getCreateTrainRenderDistance()
+                VoxyConfig.CONFIG.shareFarPlayerPosition
         )));
     }
 }

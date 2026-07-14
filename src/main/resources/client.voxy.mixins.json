@@ -9,7 +9,6 @@
     "minecraft.MixinClientLevel",
     "minecraft.MixinClientPacketListener",
     "minecraft.MixinDebugScreenOverlay",
-    "minecraft.MixinEntity",
     "minecraft.MixinFogRenderer",
     "minecraft.MixinGameRenderer",
     "minecraft.MixinLevelRenderer",

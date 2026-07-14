@@ -17,8 +17,7 @@ public abstract class MixinChunkMap {
             index = 2
     )
     private int voxy$extendIntegratedServerLimit(int vanillaLimit) {
-        if ((VoxyConfig.CONFIG.enableExtendedRequestDistance
-                || VoxyConfig.CONFIG.enableCreateFarEntityRendering) && VoxyConfig.CONFIG.isRenderingEnabled()) {
+        if (VoxyConfig.CONFIG.enableExtendedRequestDistance && VoxyConfig.CONFIG.isRenderingEnabled()) {
             // setServerViewDistance clamps its internal tracking radius, which is
             // one chunk larger than the user-facing request distance.
             return Math.max(vanillaLimit, VoxyConfig.MAX_REQUEST_DISTANCE + 1);
