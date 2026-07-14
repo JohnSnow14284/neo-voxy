@@ -21,8 +21,8 @@
   Integrates with Sodium's terrain stages, camera data, and options UI while retaining Voxy's dedicated LOD renderer.
 
 - **扩展区块请求 / Extended chunk requests**
-  提供类似 FakeSight 的扩展区块请求功能，当前最高上限为 48 区块。
-  Provides a FakeSight-style extended chunk request option with a maximum of 48 chunks.
+  单人游戏可即时请求最高 48 区块；多人游戏仍受远程服务端视距限制。
+  Singleplayer can immediately request up to 48 chunks; multiplayer remains bounded by the remote server view distance.
 
 - **无光影水体优化 / No-shader water improvements**
   采用直通 Alpha 烘焙、标准 `SRC_ALPHA` 合成和流体面排序，改善关闭光影时远景水体的颜色、透明度、雾中表现与岸线衔接。

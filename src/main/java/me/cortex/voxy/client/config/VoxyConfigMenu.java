@@ -37,7 +37,14 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                         if (instance != null) {
                             instance.updateDedicatedThreads();
                         }
-                    }, "voxy:enabled").register("voxy:iris_reload", ()->IrisUtil.reload());
+                    }, "voxy:enabled")
+                            .register("voxy:iris_reload", IrisUtil::reload)
+                            .register("voxy:refresh_chunk_request", ()->{
+                                var minecraft = Minecraft.getInstance();
+                                if (minecraft.getConnection() != null) {
+                                    minecraft.options.broadcastOptions();
+                                }
+                            });
                 },
                 new Page(Component.translatable("voxy.config.general"),
                         new Group(
@@ -194,6 +201,7 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                                         "voxy:fakesight_enabled",
                                         Component.translatable("voxy.config.fakesight.enabled"),
                                         ()->CFG.enableExtendedRequestDistance, v->CFG.enableExtendedRequestDistance=v)
+                                        .setPostChangeFlags("voxy:refresh_chunk_request")
                                         .setImpact(OptionImpact.HIGH),
                                 new IntOption(
                                         "voxy:fakesight_request_distance",
@@ -201,6 +209,7 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                                         ()->CFG.getRequestDistance(), v->CFG.requestDistance=v,
                                         new Range(VoxyConfig.MIN_REQUEST_DISTANCE, VoxyConfig.MAX_REQUEST_DISTANCE, 1))
                                         .setFormatter(v->Component.literal(Integer.toString(v)))
+                                        .setPostChangeFlags("voxy:refresh_chunk_request")
                                         .setImpact(OptionImpact.HIGH)
                                         .setEnabler("voxy:fakesight_enabled")
                         )
