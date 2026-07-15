@@ -28,7 +28,6 @@ public final class ReuseVertexConsumer implements VertexConsumer {
     private int forcedTintColour = -1;
 
     public boolean anyShaded;
-    public boolean anyDarkendTex;
     public boolean anyDiscard;
 
     private final int globalOrMetadata;
@@ -152,7 +151,6 @@ public final class ReuseVertexConsumer implements VertexConsumer {
 
     public ReuseVertexConsumer quad(BakedQuad quad, int metadata, int tintColour) {
         this.anyShaded |= quad.isShade();
-        this.anyDarkendTex |= false;// todo: what actually goes here??
         this.ensureCanPut();
         int[] vertices = quad.getVertices();
         for (int i = 0; i < 4; i++) {
@@ -399,7 +397,6 @@ public final class ReuseVertexConsumer implements VertexConsumer {
 
     public ReuseVertexConsumer reset() {
         this.anyShaded = false;
-        this.anyDarkendTex = false;
         this.anyDiscard = false;
         this.defaultMeta = 0;//RESET THE DEFAULT META
         this.vertexAlphaOnly = false;

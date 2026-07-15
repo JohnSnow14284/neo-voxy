@@ -337,48 +337,6 @@ public class AsyncNodeManager {
             //Should probably log that nothing happened, at least once
             return;
         }
-        //=====================
-        //process output events and atomically sync to results
-
-        //Events into manager
-        //manager.insertTopLevelNode();
-        //manager.removeTopLevelNode();
-
-        //manager.removeNodeGeometry();
-
-        //manager.processRequest();
-        //manager.processChildChange();
-        //manager.processGeometryResult();
-
-
-        //Outputs from manager
-        //manager.setClear();
-        //manager.setTLNCallbacks();
-
-        //manager.writeChanges()
-
-
-        //Run in a loop, process all the input events, collect the output events merge with previous and publish
-        // note: inner event processing is a loop, is.. should be synced to attomic/volatile variable that is being watched
-        // when frametime comes around, want to exit out as quick as possible, or make the event publishing
-        // "effectivly immediately", that is, atomicly swap out the render side event updates
-
-        //like
-        // var current = <new events>
-        // var old = getAndSet(this.events, null);
-        // if (old != null) {current = merge(old, current);}
-        // getAndSet(this.events, current);
-        // if (old == null) {cleanAllEventsUpToThisPoint();}//(i.e. clear any buffers or maps containing data revolving around uncommited render thread data events)
-
-        // this creates a lock free event update loop, allowing the render thread to never stall on waiting
-
-        //TODO: NOTE: THIS MUST BE A SINGLE OBJECT THAT IS EXCHANGED
-        // for it to be effectivly synchonized all outgoing events/effects _MUST_ happen at the same time
-        // for this to be lock free an entire object containing ALL the events that must be synced must be exchanged
-
-
-        //TODO: also note! this can be done for the processing of rendered out block models!!
-        // (it might be able to also be put in this thread, maybe? but is proabably worth putting in own thread for latency reasons)
         if (this.needsWaitForSync) {
             while (RESULT_HANDLE.get(this) != null && this.running) {
                 try {

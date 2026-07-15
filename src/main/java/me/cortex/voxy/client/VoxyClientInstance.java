@@ -1,6 +1,5 @@
 package me.cortex.voxy.client;
 
-import me.cortex.voxy.client.compat.FlashbackCompat;
 import me.cortex.voxy.client.config.VoxyConfig;
 import me.cortex.voxy.client.core.RenderResourceReuse;
 import me.cortex.voxy.client.mixin.sodium.AccessorSodiumWorldRenderer;
@@ -26,15 +25,9 @@ import java.nio.file.Path;
 public class VoxyClientInstance extends VoxyInstance {
     private final Config config;
     private final Path basePath;
-    private final boolean noIngestOverride;
     public VoxyClientInstance() {
         super();
-        var path = FlashbackCompat.getReplayStoragePath();
-        this.noIngestOverride = path != null;
-        if (path == null) {
-            path = getBasePath();
-        }
-        this.basePath = path.normalize();
+        this.basePath = getBasePath().normalize();
         this.config = StorageConfigUtil.getCreateStorageConfig(Config.class, c->c.version==1&&c.sectionStorageConfig!=null, ()->DEFAULT_STORAGE_CONFIG, this.basePath);
         this.updateDedicatedThreads();
     }
@@ -76,7 +69,7 @@ public class VoxyClientInstance extends VoxyInstance {
 
     @Override
     public boolean isIngestEnabled(WorldIdentifier worldId) {
-        return (!this.noIngestOverride) && VoxyConfig.CONFIG.ingestEnabled;
+        return VoxyConfig.CONFIG.ingestEnabled;
     }
 
     @Override

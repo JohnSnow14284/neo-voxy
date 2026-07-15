@@ -693,7 +693,7 @@ public class ModelFactory {
     }
 
     private static int getBlockLightEmission(BlockState state) {
-        boolean isEmissive = state.emissiveRendering(new BlockGetter() {
+        BlockGetter blockGetter = new BlockGetter() {
             @Override
             public @Nullable BlockEntity getBlockEntity(BlockPos pos) {
                 return null;
@@ -718,11 +718,12 @@ public class ModelFactory {
             public int getMinBuildHeight() {
                 return 0;
             }
-        }, BlockPos.ZERO);
+        };
+        boolean isEmissive = state.emissiveRendering(blockGetter, BlockPos.ZERO);
         if (isEmissive) {
             return 15;//full bright
         }
-        return Math.clamp(state.getLightEmission(),0,15);
+        return Math.clamp(state.getLightEmission(blockGetter, BlockPos.ZERO),0,15);
     }
 
     private static final class BiomeUploadResult implements ResultUploader {

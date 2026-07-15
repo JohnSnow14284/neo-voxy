@@ -109,9 +109,7 @@ public class SoftwareModelTextureBakery {
         for (Direction direction : new Direction[] { Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH,
                 Direction.WEST, Direction.EAST, null }) {
             var random = new SingleThreadedRandomSource(42L);
-            var quads = modelData == ModelData.EMPTY
-                    ? model.getQuads(modelState, direction, random)
-                    : model.getQuads(modelState, direction, random, modelData, layer);
+            var quads = model.getQuads(modelState, direction, random, modelData, layer);
 
             if (direction != null && !quads.isEmpty()) {
                 crossCandidate = false;
@@ -322,7 +320,6 @@ public class SoftwareModelTextureBakery {
         }
 
         boolean isAnyShaded = false;
-        boolean isAnyDarkened = false;
         boolean anyTranslucent = false;
         boolean anyDiscard = false;
         boolean centeredGroundCross = false;
@@ -331,7 +328,6 @@ public class SoftwareModelTextureBakery {
             this.translucentVC.reset();
             centeredGroundCross = this.bakeBlockModel(blockId, state, blockRenderLayer, forceSolidLeaves);
             isAnyShaded |= this.opaqueVC.anyShaded | this.translucentVC.anyShaded;
-            isAnyDarkened |= this.opaqueVC.anyDarkendTex | this.translucentVC.anyDarkendTex;
             anyTranslucent |= !this.translucentVC.isEmpty();
             anyDiscard |= this.opaqueVC.anyDiscard;
             if (!(this.opaqueVC.isEmpty() && this.translucentVC.isEmpty())) {
@@ -363,7 +359,6 @@ public class SoftwareModelTextureBakery {
                     continue;
                 }
                 isAnyShaded |= this.opaqueVC.anyShaded | this.translucentVC.anyShaded;
-                isAnyDarkened |= this.opaqueVC.anyDarkendTex | this.translucentVC.anyDarkendTex;
                 anyTranslucent |= !this.translucentVC.isEmpty();
                 anyDiscard |= this.opaqueVC.anyDiscard;
 
@@ -380,7 +375,6 @@ public class SoftwareModelTextureBakery {
         }
 
         return (isAnyShaded ? 1 : 0)
-                | (isAnyDarkened ? 2 : 0)
                 | (anyTranslucent ? 4 : 0)
                 | (anyDiscard ? 8 : 0)
                 | (centeredGroundCross ? FLAG_CENTERED_GROUND_CROSS : 0);

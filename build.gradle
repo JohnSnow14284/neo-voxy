@@ -11,55 +11,11 @@ plugins {
     id 'maven-publish'
 }
 
-def isInGHA = System.getenv("GITHUB_ACTIONS") == "true"
-
 version = project.mod_version
 group = project.maven_group
 
 base {
     archivesName = project.archives_base_name
-}
-
-// Exclude optional integrations from compilation - not all available for NeoForge 1.21.1
-// These can be re-enabled once NeoForge versions become available
-sourceSets {
-    main {
-        java {
-            // Sodium config API (changed in Sodium 0.6.x)
-            exclude 'me/cortex/voxy/client/config/IConfigPageSetter.java'
-
-            // ModMenu integration (Fabric-only)
-            exclude 'me/cortex/voxy/client/config/ModMenuIntegration.java'
-
-            // Vivecraft VR integration - ViewportSelector now NeoForge-compatible
-            // ViewportSelector no longer excluded
-
-            // Flashback integration mixins
-            exclude 'me/cortex/voxy/client/mixin/flashback/**'
-
-            // Nvidium integration mixins
-            exclude 'me/cortex/voxy/client/mixin/nvidium/**'
-
-            // Debug screen integration (API changed in MC 1.21.1)
-            exclude 'me/cortex/voxy/client/VoxyDebugScreenEntry.java'
-            exclude 'me/cortex/voxy/client/mixin/minecraft/MixinDebugScreenEntryList.java'
-
-            // Sodium config integration mixin
-            exclude 'me/cortex/voxy/client/config/VoxySodiumOptions.java'
-            exclude 'me/cortex/voxy/client/mixin/sodium/MixinVideoSettingsScreen.java'
-
-            // Blaze3D OpenGL debug mixin (GlDebug class not accessible in MC 1.21.1)
-            exclude 'me/cortex/voxy/client/mixin/minecraft/MixinGlDebug.java'
-
-            // MixinFogRenderer now compatible with MC 1.21.1 (rewritten to target net.minecraft.client.renderer.FogRenderer)
-
-            // BlockableEventLoop mixin (isNonRecoverable method removed in MC 1.21.1 - Issue #2)
-            exclude 'me/cortex/voxy/client/mixin/minecraft/MixinBlockableEventLoop.java'
-
-            // Chunky Fabric integration disabled on NeoForge initial port
-            exclude 'me/cortex/voxy/commonImpl/mixin/chunky/**'
-        }
-    }
 }
 
 repositories {
@@ -78,8 +34,8 @@ repositories {
     exclusiveContent {
         forRepository {
             maven {
-                name "caffeinemcRepository"
-                url "https://maven.caffeinemc.net/snapshots"
+                name = "caffeinemcRepository"
+                url = "https://maven.caffeinemc.net/snapshots"
             }
         }
         filter {
@@ -87,35 +43,9 @@ repositories {
         }
     }
 
-    // Forgified Fabric API for NeoForge
-    maven {
-        name = "Sinytra"
-        url = "https://maven.su5ed.dev/releases"
-    }
-
-    maven { url = "https://maven.shedaniel.me/" }
-    maven { url = "https://maven.terraformersmc.com/releases/" }
     maven {
         name = "CurseMaven"
         url = "https://cursemaven.com"
-    }
-
-    exclusiveContent {
-        forRepository {
-            ivy {
-                name = "github"
-                url = "https://github.com/"
-                patternLayout {
-                    artifact '/[organisation]/[module]/releases/download/[revision]/[module]-[revision]-[classifier].[ext]'
-                }
-                metadataSources {
-                    artifact()
-                }
-            }
-        }
-        filter {
-            includeModuleByRegex("[^\\.]+", "nvidium")
-        }
     }
 }
 
@@ -172,15 +102,6 @@ neoForge {
     }
 }
 
-def modRuntimeOnlyMsk = {arg->}
-if (!isInGHA) {
-    modRuntimeOnlyMsk = { arg ->
-        dependencies {
-            modRuntimeOnly(arg)
-        }
-    }
-}
-
 configurations {
     sodiumDistribution
 }
@@ -216,21 +137,7 @@ dependencies {
     // Lithium for NeoForge (0.15.1 - latest for MC 1.21.1)
     implementation("maven.modrinth:lithium:mc1.21.1-0.15.1-neoforge")
 
-    // SodiumOptionsAPI for Video Settings integration
-    // Provides event API to add custom pages to Sodium's options GUI
-    compileOnly("maven.modrinth:sodium-options-api:neoforge-1.21.1-1.0.10")
-
-    // Reese's Sodium Options - required by SodiumOptionsAPI
-    compileOnly("maven.modrinth:reeses-sodium-options:mc1.21.3-1.8.0+neoforge")
-
-    // Optional mod dependencies - commented out for initial port
-    // TODO: Add NeoForge versions when available
-    //compileOnly "drouarb:nvidium:0.4.1-beta4:1.21.6@jar"
-    //compileOnly("maven.modrinth:modmenu:17.0.0-alpha.1")
     compileOnly("curse.maven:irisshaders-455508:6661598")
-    //compileOnly("maven.modrinth:chunky:1.4.54-neoforge")
-    //compileOnly("maven.modrinth:vivecraft:1.21.9-1.3.2-neoforge")
-    //compileOnly("maven.modrinth:flashback:rNCr1Rbs")
 }
 
 
@@ -246,22 +153,16 @@ java {
     if (JavaVersion.current() < javaVersion) {
         toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
     }
-
-    // Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
-    // if it is present.
-    // If you remove this line, sources will not be generated.
-
-
-    //withSourcesJar()
 }
 
+def licenseArchiveSuffix = project.archives_base_name.toString()
 jar {
     // Keep the full dependency bundle as an intermediate artifact. The optimized
     // distribution produced below uses the normal release filename.
     archiveClassifier.set('unoptimized')
 
-    from("LICENSE") {
-        rename { "${it}_${project.archives_base_name}"}
+    from("LICENSE.md") {
+        rename { "${it}_${licenseArchiveSuffix}"}
     }
 }
 
@@ -427,118 +328,6 @@ tasks.named('build') {
     dependsOn slimJarTask
 }
 
-def pythonExecutable = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows') ? 'python' : 'python3'
-
-// Validate mixin configuration (registration, exclusions, remap flags)
-task validateMixinConfig(type: Exec) {
-    description = 'Validates mixin registration, exclusions, and configuration'
-    group = 'verification'
-
-    commandLine pythonExecutable, 'scripts/validate_mixin_config.py'
-    environment 'PYTHONIOENCODING', 'utf-8'
-
-    // Only run if script exists
-    onlyIf {
-        file('scripts/validate_mixin_config.py').exists()
-    }
-}
-
-// Validate mixin target signatures before compilation
-task validateMixinSignatures(type: Exec) {
-    description = 'Validates @Inject/@Shadow targets against Minecraft source'
-    group = 'verification'
-
-    commandLine pythonExecutable, 'scripts/validate_mixin_targets.py'
-    environment 'PYTHONIOENCODING', 'utf-8'
-
-    // Only run if script and MC sources exist
-    onlyIf {
-        file('scripts/validate_mixin_targets.py').exists() &&
-        file('.reference/minecraft/1.21.1/decompiled').exists()
-    }
-
-    // Ignore failures if sources not available or script has issues (optional validation)
-    ignoreExitValue = true
-}
-
-// Validate mixin configurations after JAR creation
-task validateMixins(type: Exec) {
-    dependsOn jar
-
-    description = 'Validates that all mixins declared in JSON configs are present in the JAR'
-    group = 'verification'
-
-    commandLine pythonExecutable, 'scripts/validate_mixins.py'
-    environment 'PYTHONIOENCODING', 'utf-8'
-
-    // Only run if script exists
-    onlyIf {
-        file('scripts/validate_mixins.py').exists()
-    }
-}
-
-// Run validations as part of build process
-compileJava.dependsOn validateMixinConfig       // Before compilation (config check)
-compileJava.dependsOn validateMixinSignatures   // Before compilation (signature check)
-build.dependsOn validateMixins                   // After JAR creation (content check)
-
-
-
-// NeoForge: makeExcludedRocksDB and processIncludeJars are Fabric Loom specific - removed
-// TODO: Implement NeoForge equivalent for RocksDB filtering if needed
-/*
-tasks.register('makeExcludedRocksDB', Zip) {
-    archiveExtension.set("jar")
-    entryCompression = ZipEntryCompression.STORED
-    destinationDirectory.set temporaryDir
-
-    dependsOn configurations.includeInternal
-
-    def files = configurations.includeInternal.incoming.getArtifacts().getArtifactFiles().filter {
-        it.name.startsWith('rocksdb')
-    }
-
-    from {->zipTree(files.first())}
-    archiveFileName.set(providers.provider{files.first().name})
-
-    exclude {
-        def file = it.name
-        if (file.endsWith(".jnilib")) {
-            return true
-        }
-        if (!file.endsWith(".so")) {
-            return false
-        }
-        return ["osx", "linux32", "musl", "s390x", "riscv64", "ppc64le", "aarch64"].any(file::contains)
-    }
-}
-
-processIncludeJars {
-    outputs.cacheIf {true}
-
-    dependsOn makeExcludedRocksDB
-    jars = jars.filter {!it.name.startsWith('rocksdb')}
-    jars.from(makeExcludedRocksDB)
-}
-*/
-
-// NeoForge: remapJar is handled by NeoGradle automatically
-// TODO: Re-implement git hash classifier for NeoForge jar task
-/*
-remapJar {
-    doFirst {
-        delete fileTree(getDestinationDirectory().get())
-    }
-
-    if (!isInGHA) {
-        def hash = gitCommitHash();
-        if (!hash.equals("<UnknownCommit>")) {
-            archiveClassifier.set(hash);
-        }
-    }
-}
-*/
-
 project.ext.lwjglVersion = "3.3.3"
 project.ext.lwjglNatives = "natives-windows"
 
@@ -673,22 +462,5 @@ dependencies {
             strictly '[3.40.0.0, 4.0.0.0)'
             prefer '3.49.1.0'
         }
-    }
-    //implementation 'org.rocksdb:rocksdbjni:8.10.0'
-    //implementation 'redis.clients:jedis:5.1.0'
-}
-
-if (!isInGHA) {
-    repositories {
-        maven {
-            url = "https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1"
-        }
-    }
-
-    dependencies {
-        /*
-        modRuntimeOnly('me.djtheredstoner:DevAuth-fabric:1.2.1') {
-            exclude group: 'net.fabricmc', module: 'fabric-loader'
-        }*/
     }
 }

@@ -1275,31 +1275,6 @@ public class NodeManager {
             throw new IllegalStateException("Parent node must be an inner node");
         pId &= NODE_ID_MSK;
 
-        if (false) {//Check all children are leaf nodes
-            //TODO: make a better way to do this (i.e. gpu driven)
-            int cPtr = this.nodeData.getChildPtr(pId);
-            if (cPtr != SENTINEL_EMPTY_CHILD_PTR) {
-                if (cPtr == -1) {
-                    throw new IllegalStateException();
-                }
-                int cCnt = this.nodeData.getChildPtrCount(pId);
-                for (int i = 0; i < cCnt; i++) {
-                    if (!this.nodeData.nodeExists(i+cPtr))
-                        throw new IllegalStateException();
-                    long cp = this.nodeData.nodePosition(i+cPtr);
-                    long cn = this.activeSectionMap.get(cp);
-                    if (cn==-1)
-                        throw new IllegalStateException();
-                    //If a child is not a leaf, return
-                    if ((cn&NODE_TYPE_MSK)!=NODE_TYPE_LEAF) {
-
-                        this.clearAllocId(this.activeSectionMap.get(cPos)&NODE_ID_MSK);
-                        return;
-                    }
-                }
-            }
-        }
-
         int pGeo = this.nodeData.getNodeGeometry(pId);
         if (pGeo == NULL_GEOMETRY_ID) {
             //We cannot make the parent a leaf node with null geometry
