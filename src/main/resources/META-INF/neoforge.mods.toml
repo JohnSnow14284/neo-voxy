@@ -40,6 +40,13 @@ versionRange="[1.8.12,)"
 ordering="AFTER"
 side="CLIENT"
 
+[[dependencies.voxy]]
+modId="create"
+type="optional"
+versionRange="[6.0.10,)"
+ordering="AFTER"
+side="BOTH"
+
 [[mixins]]
 config="client.voxy.mixins.json"
 
@@ -51,4 +58,3 @@ config="common.voxy.mixins.json"
 
 [[mixins]]
 config="fakesight.voxy.mixins.json"
-

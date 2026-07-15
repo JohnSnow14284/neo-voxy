@@ -65,6 +65,9 @@ public class VoxyConfig {
     public boolean renderFarPlayerNames = true;
     public int farPlayerAnimationDistance = 1024;
     public boolean shareFarPlayerPosition = true;
+    public boolean enableFarCreateContraptionRendering = true;
+    // 0 follows Voxy's LOD render distance; otherwise this is an absolute block distance.
+    public int farCreateContraptionDistance = 0;
 
     public int getRequestDistance() {
         return Math.clamp(this.requestDistance, MIN_REQUEST_DISTANCE, MAX_REQUEST_DISTANCE);
@@ -72,6 +75,12 @@ public class VoxyConfig {
 
     public int getFarEntityRenderDistanceBlocks() {
         return Math.clamp(Math.round(this.sectionRenderDistance * 32.0f * 16.0f), 64, 32768);
+    }
+
+    public int getFarCreateContraptionDistanceBlocks() {
+        return this.farCreateContraptionDistance == 0
+                ? this.getFarEntityRenderDistanceBlocks()
+                : Math.clamp(this.farCreateContraptionDistance, 64, 32768);
     }
 
     public int getRenderPressureLevel() {
@@ -152,6 +161,7 @@ public class VoxyConfig {
         this.fogDensity = Math.clamp(this.fogDensity, 0.0f, 1.0f);
         this.setLeafLodMode(this.getLeafLodMode());
         this.farPlayerAnimationDistance = Math.clamp(this.farPlayerAnimationDistance, 0, 32768);
+        this.farCreateContraptionDistance = Math.clamp(this.farCreateContraptionDistance, 0, 32768);
     }
 
     public void save() {

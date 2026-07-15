@@ -7,6 +7,7 @@ import me.cortex.voxy.client.core.SSAO;
 import me.cortex.voxy.client.core.util.IrisUtil;
 import me.cortex.voxy.common.util.cpu.CpuLayout;
 import me.cortex.voxy.commonImpl.VoxyCommon;
+import me.cortex.voxy.compat.far.FarEntityClient;
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPoint;
 import net.caffeinemc.mods.sodium.api.config.ConfigEntryPointForge;
 import net.caffeinemc.mods.sodium.api.config.ConfigState;
@@ -39,6 +40,7 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                         }
                     }, "voxy:enabled")
                             .register("voxy:iris_reload", IrisUtil::reload)
+                            .register("voxy:refresh_far_entities", FarEntityClient::sendHello)
                             .register("voxy:refresh_chunk_request", ()->{
                                 var minecraft = Minecraft.getInstance();
                                 if (minecraft.getConnection() != null) {
@@ -213,7 +215,30 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                                         .setImpact(OptionImpact.HIGH)
                                         .setEnabler("voxy:fakesight_enabled")
                         )
-                ).setEnabler("voxy:enabled"));
+                ).setEnabler("voxy:enabled"),
+                new Page(Component.translatable("voxy.config.create"),
+                        new Group(
+                                new BoolOption(
+                                        "voxy:create_far_contraptions",
+                                        Component.translatable("voxy.config.create.enabled"),
+                                        () -> CFG.enableFarCreateContraptionRendering,
+                                        v -> CFG.enableFarCreateContraptionRendering = v)
+                                        .setPostChangeFlags("voxy:refresh_far_entities"),
+                                new IntOption(
+                                        "voxy:create_far_contraption_distance",
+                                        Component.translatable("voxy.config.create.distance"),
+                                        () -> CFG.farCreateContraptionDistance == 0
+                                                ? 0 : CFG.farCreateContraptionDistance / 16,
+                                        v -> CFG.farCreateContraptionDistance = v * 16,
+                                        new Range(0, 2048, 1))
+                                        .setFormatter(v -> v == 0
+                                                ? Component.translatable("voxy.config.create.distance.follow_lod")
+                                                : Component.translatable("voxy.config.create.distance.chunks", v))
+                                        .setPostChangeFlags("voxy:refresh_far_entities")
+                                        .setImpact(OptionImpact.MEDIUM)
+                                        .setEnabler("voxy:create_far_contraptions")
+                        )
+                ).setEnablerAND("voxy:enabled", "voxy:rendering"));
 
     }
 

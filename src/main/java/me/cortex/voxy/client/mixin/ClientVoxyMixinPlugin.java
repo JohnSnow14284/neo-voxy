@@ -11,6 +11,7 @@ import java.util.Set;
 public class ClientVoxyMixinPlugin implements IMixinConfigPlugin {
     private static boolean valkyrienSkiesInstalled;
     private static boolean nvidiumInstalled;
+    private static boolean createInstalled;
 
     private static boolean isLoadedEarly(String modId) {
         var list = LoadingModList.get();
@@ -21,10 +22,13 @@ public class ClientVoxyMixinPlugin implements IMixinConfigPlugin {
     public void onLoad(String mixinPackage) {
         valkyrienSkiesInstalled = isLoadedEarly("valkyrienskies");
         nvidiumInstalled = isLoadedEarly("nvidium");
+        createInstalled = isLoadedEarly("create");
     }
 
     @Override
-    public boolean shouldApplyMixin(String targetClassName, String mixinClassName) { return true; }
+    public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        return !mixinClassName.contains(".create.") || createInstalled;
+    }
 
     @Override
     public List<String> getMixins() {

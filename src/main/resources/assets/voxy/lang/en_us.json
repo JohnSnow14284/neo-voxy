@@ -50,5 +50,12 @@
   "voxy.config.general.leafLodMode.tooltip": "Controls distant leaf rendering. Fast uses opaque foliage. Balanced uses stable per-block texture rotations, culls hidden internal faces, and keeps irregular mip-aware cutouts at medium impact. Quality preserves fine cutout detail at higher GPU cost.",
   "voxy.config.general.leafLodMode.fast": "Fast",
   "voxy.config.general.leafLodMode.balanced": "Balanced",
-  "voxy.config.general.leafLodMode.quality": "Quality"
+  "voxy.config.general.leafLodMode.quality": "Quality",
+  "voxy.config.create": "Create Contraptions",
+  "voxy.config.create.enabled": "Render far Create contraptions",
+  "voxy.config.create.enabled.tooltip": "Renders moving Create structures and independently simulated trains beyond vanilla entity and chunk render distance. Multiplayer requires Voxy on the server.",
+  "voxy.config.create.distance": "Contraption render distance",
+  "voxy.config.create.distance.tooltip": "Maximum far-contraption distance. Follow LOD uses Voxy's current LOD render distance.",
+  "voxy.config.create.distance.follow_lod": "Follow LOD distance",
+  "voxy.config.create.distance.chunks": "%s chunks"
 }
