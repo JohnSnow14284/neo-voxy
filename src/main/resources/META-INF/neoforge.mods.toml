@@ -41,11 +41,11 @@ ordering="AFTER"
 side="CLIENT"
 
 [[dependencies.voxy]]
-modId="create"
+modId="domum_ornamentum"
 type="optional"
-versionRange="[6.0.10,)"
+versionRange="[1.0,)"
 ordering="AFTER"
-side="BOTH"
+side="CLIENT"
 
 [[mixins]]
 config="client.voxy.mixins.json"

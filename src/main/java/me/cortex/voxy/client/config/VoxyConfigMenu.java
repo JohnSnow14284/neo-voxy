@@ -215,30 +215,7 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                                         .setImpact(OptionImpact.HIGH)
                                         .setEnabler("voxy:fakesight_enabled")
                         )
-                ).setEnabler("voxy:enabled"),
-                new Page(Component.translatable("voxy.config.create"),
-                        new Group(
-                                new BoolOption(
-                                        "voxy:create_far_contraptions",
-                                        Component.translatable("voxy.config.create.enabled"),
-                                        () -> CFG.enableFarCreateContraptionRendering,
-                                        v -> CFG.enableFarCreateContraptionRendering = v)
-                                        .setPostChangeFlags("voxy:refresh_far_entities"),
-                                new IntOption(
-                                        "voxy:create_far_contraption_distance",
-                                        Component.translatable("voxy.config.create.distance"),
-                                        () -> CFG.farCreateContraptionDistance == 0
-                                                ? 0 : CFG.farCreateContraptionDistance / 16,
-                                        v -> CFG.farCreateContraptionDistance = v * 16,
-                                        new Range(0, 2048, 1))
-                                        .setFormatter(v -> v == 0
-                                                ? Component.translatable("voxy.config.create.distance.follow_lod")
-                                                : Component.translatable("voxy.config.create.distance.chunks", v))
-                                        .setPostChangeFlags("voxy:refresh_far_entities")
-                                        .setImpact(OptionImpact.MEDIUM)
-                                        .setEnabler("voxy:create_far_contraptions")
-                        )
-                ).setEnablerAND("voxy:enabled", "voxy:rendering"));
+                ).setEnabler("voxy:enabled"));
 
     }
 

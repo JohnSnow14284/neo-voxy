@@ -31,6 +31,7 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
     private final FullscreenBlit shaderDepthHackFixTransformBlit;
 
     private final GlBuffer shaderUniforms;
+    private final Matrix4f targetTransform = new Matrix4f();
 
     public IrisVoxyRenderPipeline(RenderProperties properties, IrisVoxyRenderPipelineData data, AsyncNodeManager nodeManager, NodeCleaner nodeCleaner, HierarchicalOcclusionTraverser traversal, BooleanSupplier frexSupplier) {
         super(properties, nodeManager, nodeCleaner, traversal, frexSupplier, data.shouldDeferTranslucency());
@@ -147,11 +148,15 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
 
     @Override
     protected void finish(Viewport<?> viewport, int sourceFrameBuffer, int srcWidth, int srcHeight) {
+        // Iris owns the source depth buffer unless the shader pack explicitly
+        // opts in to distant-horizon depth. Writing Voxy's opaque depth into it
+        // unconditionally makes several packs reject/overwrite the later LOD
+        // water composite.
         if (this.data.renderToVanillaDepth && srcWidth == viewport.width  && srcHeight == viewport.height) {//We can only depthblit out if destination size is the same
             glColorMask(false, false, false, false);
             AbstractRenderPipeline.transformBlitDepth(this.depthBlit,
                     this.fbTranslucent.getDepthTex().id, sourceFrameBuffer,
-                    viewport, new Matrix4f(viewport.vanillaProjection).mul(viewport.modelView));
+                    viewport, this.targetTransform.set(viewport.vanillaProjection).mul(viewport.modelView));
             glColorMask(true, true, true, true);
         } else {
             // normally disabled by AbstractRenderPipeline but since we are skipping it we do it here
@@ -281,4 +286,5 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
     public float[] getRenderScalingFactor() {
         return this.data.resolutionScale;
     }
+
 }

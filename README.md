@@ -31,13 +31,6 @@
   单人游戏自动具备服务端支持；多人游戏的远距离玩家快照要求服务端也安装本版本。若安装独立 SeeU，Voxy 的内置玩家代理会自动停用以避免重复渲染。
   Singleplayer includes the server side automatically; multiplayer far-player snapshots require this version on the server too. The built-in player proxy disables itself when standalone SeeU is installed.
 
-- **Create 动态结构与列车远距渲染 / Far Create contraptions and trains**
-  在原版实体与区块渲染距离之外单独渲染胶粘动态结构；列车即使处于未加载区块，也可从 Create 的全局铁路状态恢复并渲染。距离可跟随 Voxy LOD，也可独立配置。
-  Renders glued moving structures beyond vanilla entity and chunk distance. Trains can also be reconstructed from Create's global railway state while their chunks are unloaded. Distance can follow Voxy LOD or use a separate limit.
-
-  近景仍使用 Flywheel/Colorwheel，远景代理使用 Create 自带的缓冲 fallback 路径；多人游戏需要服务端同时安装本版本。
-  Nearby structures continue to use Flywheel/Colorwheel, while detached far proxies use Create's buffered fallback path. Multiplayer requires this version on the server.
-
 - **无光影水体优化 / No-shader water improvements**
   采用直通 Alpha 烘焙、标准 `SRC_ALPHA` 合成和流体面排序，改善关闭光影时远景水体的颜色、透明度、雾中表现与岸线衔接。
   Uses straight-alpha baking, standard `SRC_ALPHA` compositing, and ordered fluid-face submission to improve distant water colour, transparency, fog blending, and shorelines without shaders.
@@ -74,8 +67,6 @@
 | Sodium | 0.8.x | Required | Rendering and options integration |
 | Iris | 1.8.x | Optional | Shader support depends on the selected shader pack |
 | Lithium | 0.15.x | Optional | Recommended general performance improvement |
-| Create | 6.0.10+ | Optional | Far contraption and unloaded-train rendering |
-| Colorwheel | 1.3.x | Optional | Nearby Flywheel/Iris compatibility remains active |
 | Supplement | 1.21.1 builds | Supported | Includes Lumisene Fluids compatibility |
 | Domum Ornamentum | 1.21.1 builds | Supported | Dynamic material and proxy-model compatibility |
 

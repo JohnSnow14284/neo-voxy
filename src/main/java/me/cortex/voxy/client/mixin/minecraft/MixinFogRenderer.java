@@ -41,8 +41,11 @@ public class MixinFogRenderer {
         }
 
         boolean normalTerrainFog = camera.getFluidInCamera() == FogType.NONE && !shortRangeFog && !thickFog;
+        // Use the configured LOD fog distance instead of stretching fog across
+        // the entire Voxy render distance (which made it effectively invisible).
         float capturedEnd = normalTerrainFog
-                ? VoxyConfig.CONFIG.sectionRenderDistance * 32.0f * 16.0f
+                ? Math.max(RenderSystem.getShaderFogStart() + 1.01f,
+                        VoxyConfig.CONFIG.skyFogDistance * 16.0f)
                 : originalEnd;
         renderer.setCapturedFog(RenderSystem.getShaderFogStart(), capturedEnd, RenderSystem.getShaderFogColor());
 

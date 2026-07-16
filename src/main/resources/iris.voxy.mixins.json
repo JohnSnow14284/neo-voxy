@@ -1,6 +1,7 @@
 {
   "required": false,
   "package": "me.cortex.voxy.client.mixin",
+  "plugin": "me.cortex.voxy.client.mixin.IrisVoxyMixinPlugin",
   "compatibilityLevel": "JAVA_21",
   "client": [
     "iris.CustomUniformsAccessor",

@@ -4,8 +4,6 @@ import me.cortex.voxy.common.Logger;
 import me.cortex.voxy.common.util.Pair;
 import me.cortex.voxy.common.util.TrackedObject;
 
-import java.util.Random;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
@@ -106,55 +104,4 @@ public class PerThreadContextExecutor extends TrackedObject {
         return this.isLive;
     }
 
-
-    private static void inner(PerThreadContextExecutor s) throws InterruptedException {
-        Thread[] t = new Thread[1<<8];
-        Random r = new Random(19874396);
-        for (int i = 0; i<t.length; i++) {
-            long rs = r.nextLong();
-            t[i] = new Thread(()->{
-                s.run();
-                Random lr = new Random(rs);
-                while (lr.nextFloat()<0.9) {
-                    s.run();
-                    try {
-                        Thread.sleep((long) (100*lr.nextFloat()));
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-            });
-            t[i].start();
-        }
-
-        for (var tt : t) {
-            tt.join();
-        }
-    }
-
-    public static void main(String[] args) throws InterruptedException {
-        AtomicInteger cc = new AtomicInteger();
-        var s = new PerThreadContextExecutor(()->{
-            AtomicBoolean cleaned = new AtomicBoolean();
-            int[] a = new int[1];
-            return new Pair<>(()->{
-                if (cleaned.get()) {
-                    System.err.println("TRIED EXECUTING CLEANED CTX");
-                } else {
-                    a[0]++;
-                }
-            }, ()->{
-                if (cleaned.getAndSet(true)) {
-                    System.err.println("TRIED DOUBLE CLEANING A VALUE");
-                } else {
-                    System.out.println("Cleaned ref, exec: " + a[0]);
-                    cc.incrementAndGet();
-                }
-            });
-        });
-        inner(s);
-        System.gc();
-        s.shutdown();
-        System.err.println(cc.get());
-    }
 }

@@ -267,7 +267,7 @@ public class Mapper {
     }
 
     public int getIdForBlockStateVariant(BlockState state, String variantType,
-                                             String variantKey, CompoundTag variantData) {
+                                              String variantKey, CompoundTag variantData) {
         if (state.isAir()) {
             return 0;
         }

@@ -4,7 +4,6 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 
 import java.nio.charset.StandardCharsets;
@@ -13,16 +12,14 @@ import java.util.List;
 import java.util.UUID;
 
 public final class FarEntityProtocol {
-    public static final int VERSION = 2;
+    public static final int VERSION = 5;
     private static final int MAX_PLAYERS_PER_PACKET = 1024;
-    private static final int MAX_CONTRAPTIONS_PER_PACKET = 2048;
     private static final int MAX_STRING_BYTES = 32767;
 
     private FarEntityProtocol() {
     }
 
-    public record Hello(int version, boolean enabled, int maximumDistanceBlocks, boolean shareSelf,
-                        boolean createContraptionsEnabled, int createContraptionDistanceBlocks) {
+    public record Hello(int version, boolean enabled, int maximumDistanceBlocks, boolean shareSelf) {
     }
 
     public record ItemSnapshot(String itemId, int count) {
@@ -78,29 +75,6 @@ public final class FarEntityProtocol {
         }
     }
 
-    /**
-     * A Create contraption definition is only present when it is new or its block
-     * structure changed. Position and rotation are sent in every batch.
-     */
-    public record ContraptionSnapshot(
-            UUID id, int liveEntityId,
-            UUID trainId, int carriageIndex,
-            double x, double y, double z,
-            float yaw, float pitch, float angle, int rotationAxis,
-            int definitionHash, CompoundTag definition
-    ) {
-        public boolean isTrainCarriage() {
-            return this.trainId != null && this.carriageIndex >= 0;
-        }
-    }
-
-    public record ContraptionBatch(String dimensionKey, List<ContraptionSnapshot> contraptions) {
-        public ContraptionBatch {
-            dimensionKey = dimensionKey == null ? "" : dimensionKey;
-            contraptions = contraptions == null ? List.of() : List.copyOf(contraptions);
-        }
-    }
-
     public record HelloPayload(Hello hello) implements CustomPacketPayload {
         public static final Type<HelloPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath("voxy", "far_entity_hello"));
         public static final StreamCodec<RegistryFriendlyByteBuf, HelloPayload> STREAM_CODEC = new StreamCodec<>() {
@@ -141,38 +115,15 @@ public final class FarEntityProtocol {
         }
     }
 
-    public record ContraptionsPayload(ContraptionBatch batch) implements CustomPacketPayload {
-        public static final Type<ContraptionsPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath("voxy", "far_create_contraptions"));
-        public static final StreamCodec<RegistryFriendlyByteBuf, ContraptionsPayload> STREAM_CODEC = new StreamCodec<>() {
-            @Override
-            public ContraptionsPayload decode(RegistryFriendlyByteBuf buf) {
-                return new ContraptionsPayload(decodeContraptions(buf));
-            }
-
-            @Override
-            public void encode(RegistryFriendlyByteBuf buf, ContraptionsPayload payload) {
-                encodeContraptions(buf, payload.batch());
-            }
-        };
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
-
     private static void encodeHello(ByteBuf buf, Hello hello) {
         writeVarInt(buf, hello.version());
         buf.writeBoolean(hello.enabled());
         writeVarInt(buf, hello.maximumDistanceBlocks());
         buf.writeBoolean(hello.shareSelf());
-        buf.writeBoolean(hello.createContraptionsEnabled());
-        writeVarInt(buf, hello.createContraptionDistanceBlocks());
     }
 
     private static Hello decodeHello(ByteBuf buf) {
-        return new Hello(readVarInt(buf), buf.readBoolean(), readVarInt(buf), buf.readBoolean(),
-                buf.readBoolean(), readVarInt(buf));
+        return new Hello(readVarInt(buf), buf.readBoolean(), readVarInt(buf), buf.readBoolean());
     }
 
     private static void encodePlayers(ByteBuf buf, PlayerBatch batch) {
@@ -251,63 +202,6 @@ public final class FarEntityProtocol {
                 buf.readDouble(), buf.readDouble(), buf.readDouble(),
                 buf.readFloat(), buf.readFloat()
         );
-    }
-
-    private static void encodeContraptions(RegistryFriendlyByteBuf buf, ContraptionBatch batch) {
-        writeUtf(buf, batch.dimensionKey());
-        writeVarInt(buf, batch.contraptions().size());
-        for (ContraptionSnapshot contraption : batch.contraptions()) {
-            writeUuid(buf, contraption.id());
-            writeVarInt(buf, contraption.liveEntityId() + 1);
-            buf.writeBoolean(contraption.trainId() != null);
-            if (contraption.trainId() != null) {
-                writeUuid(buf, contraption.trainId());
-                writeVarInt(buf, contraption.carriageIndex());
-            }
-            buf.writeDouble(contraption.x());
-            buf.writeDouble(contraption.y());
-            buf.writeDouble(contraption.z());
-            buf.writeFloat(contraption.yaw());
-            buf.writeFloat(contraption.pitch());
-            buf.writeFloat(contraption.angle());
-            buf.writeByte(contraption.rotationAxis());
-            buf.writeInt(contraption.definitionHash());
-            buf.writeBoolean(contraption.definition() != null);
-            if (contraption.definition() != null) {
-                buf.writeNbt(contraption.definition());
-            }
-        }
-    }
-
-    private static ContraptionBatch decodeContraptions(RegistryFriendlyByteBuf buf) {
-        String dimension = readUtf(buf);
-        int size = readVarInt(buf);
-        if (size < 0 || size > MAX_CONTRAPTIONS_PER_PACKET) {
-            throw new IllegalArgumentException("Invalid far-contraption count: " + size);
-        }
-        List<ContraptionSnapshot> contraptions = new ArrayList<>(size);
-        for (int i = 0; i < size; i++) {
-            UUID id = readUuid(buf);
-            int liveEntityId = readVarInt(buf) - 1;
-            UUID trainId = null;
-            int carriageIndex = -1;
-            if (buf.readBoolean()) {
-                trainId = readUuid(buf);
-                carriageIndex = readVarInt(buf);
-            }
-            double x = buf.readDouble();
-            double y = buf.readDouble();
-            double z = buf.readDouble();
-            float yaw = buf.readFloat();
-            float pitch = buf.readFloat();
-            float angle = buf.readFloat();
-            int rotationAxis = buf.readByte();
-            int definitionHash = buf.readInt();
-            CompoundTag definition = buf.readBoolean() ? buf.readNbt() : null;
-            contraptions.add(new ContraptionSnapshot(id, liveEntityId, trainId, carriageIndex,
-                    x, y, z, yaw, pitch, angle, rotationAxis, definitionHash, definition));
-        }
-        return new ContraptionBatch(dimension, contraptions);
     }
 
     private static void writeUuid(ByteBuf buf, UUID uuid) {

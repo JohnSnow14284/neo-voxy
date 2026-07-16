@@ -48,14 +48,18 @@ layout(binding = STATISTICS_BUFFER_BINDING, std430) restrict buffer statisticsBu
 #endif
 
 void addRequest(inout UnpackedNode node) {
-    //printf("Put node decend request");
-    if (!hasRequested(node)) {
+    // A request bit used to remain set forever if a shader/resource reload
+    // landed between queue submission and readback. Retry after roughly two
+    // seconds; ordinary in-flight requests still suppress duplicates.
+    uint requestAge = (frameId - getRequestFrame(node)) & 0xFFu;
+    bool retryExpiredRequest = hasRequested(node) && requestAge >= 96u;
+    if (!hasRequested(node) || retryExpiredRequest) {
         if (requestQueueIndex.x < requestQueueSize) {//Soft limit
             uint atomRes = atomicAdd(requestQueueIndex.x, 1);
             if (atomRes < MAX_REQUEST_QUEUE_SIZE) {//Hard limit
                 //Mark node as having a request submitted to prevent duplicate submissions
                 requestQueue[atomRes] = getRawPos(node);
-                markRequested(node);
+                markRequested(node, frameId);
             }
         }
     }

@@ -30,7 +30,9 @@ import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -41,6 +43,9 @@ final class FarEntityRenderer {
     private final FarPlayerTracker tracker;
     private final Map<UUID, PlayerProxy> playerProxies = new HashMap<>();
     private final Map<UUID, Entity> vehicleProxies = new HashMap<>();
+    private final Set<UUID> activePlayers = new HashSet<>();
+    private final Set<UUID> activeProxyVehicles = new HashSet<>();
+    private final Set<UUID> renderedProxyVehicles = new HashSet<>();
 
     FarEntityRenderer(FarPlayerTracker tracker) {
         this.tracker = tracker;
@@ -55,6 +60,9 @@ final class FarEntityRenderer {
         }
         this.playerProxies.clear();
         this.vehicleProxies.clear();
+        this.activePlayers.clear();
+        this.activeProxyVehicles.clear();
+        this.renderedProxyVehicles.clear();
     }
 
     void render(RenderLevelStageEvent event) {
@@ -75,43 +83,60 @@ final class FarEntityRenderer {
             this.clear();
             return;
         }
-
-        for (PlayerProxy proxy : this.playerProxies.values()) {
-            proxy.stopRiding();
+        if (this.tracker.isEmpty()) {
+            if (!this.playerProxies.isEmpty() || !this.vehicleProxies.isEmpty()) {
+                this.clear();
+            }
+            return;
         }
+
         Vec3 cameraPosition = event.getCamera().getPosition();
         EntityRenderDispatcher dispatcher = minecraft.getEntityRenderDispatcher();
         int maximumDistance = VoxyConfig.CONFIG.getFarEntityRenderDistanceBlocks();
+        double maximumDistanceSquared = (double) maximumDistance * maximumDistance;
         int vanillaDistance = minecraft.options.getEffectiveRenderDistance() * 16;
+        double vanillaDistanceSquared = (double) (vanillaDistance + 16) * (vanillaDistance + 16);
+        int animationDistance = VoxyConfig.CONFIG.farPlayerAnimationDistance;
+        double animationDistanceSquared = (double) animationDistance * animationDistance;
         int animationTick = localPlayer.tickCount;
         long now = System.nanoTime();
-        Set<UUID> activePlayers = new HashSet<>();
-        Set<UUID> activeProxyVehicles = new HashSet<>();
-        Set<UUID> renderedProxyVehicles = new HashSet<>();
+        double viewerX = localPlayer.getX();
+        double viewerY = localPlayer.getY();
+        double viewerZ = localPlayer.getZ();
+        this.activePlayers.clear();
+        this.activeProxyVehicles.clear();
+        this.renderedProxyVehicles.clear();
+        boolean renderedAny = false;
 
         for (TrackedPlayer tracked : this.tracker.players()) {
-            Vec3 position = tracked.renderPosition(now);
-            double distance = position.distanceTo(localPlayer.position());
-            if (distance > maximumDistance) {
+            float progress = tracked.progress(now);
+            double positionX = tracked.renderX(progress);
+            double positionY = tracked.renderY(progress);
+            double positionZ = tracked.renderZ(progress);
+            double dx = positionX - viewerX;
+            double dy = positionY - viewerY;
+            double dz = positionZ - viewerZ;
+            double distanceSquared = dx * dx + dy * dy + dz * dz;
+            if (distanceSquared > maximumDistanceSquared) {
                 continue;
             }
-            int chunkX = Mth.floor(position.x) >> 4;
-            int chunkZ = Mth.floor(position.z) >> 4;
+            int chunkX = Mth.floor(positionX) >> 4;
+            int chunkZ = Mth.floor(positionZ) >> 4;
             boolean realPlayerPresent = level.getPlayerByUUID(tracked.uuid()) != null;
-            if (realPlayerPresent && level.hasChunk(chunkX, chunkZ) && distance <= vanillaDistance + 16.0D) {
+            if (realPlayerPresent && level.hasChunk(chunkX, chunkZ)
+                    && distanceSquared <= vanillaDistanceSquared) {
                 continue;
             }
 
-            PlayerProxy player = this.playerProxies.compute(tracked.uuid(), (uuid, current) ->
-                    current == null || current.level() != level
-                            ? new PlayerProxy(level, tracked.uuid(), tracked.name())
-                            : current
-            );
-            player.apply(tracked, position, maximumDistance,
-                    VoxyConfig.CONFIG.farPlayerAnimationDistance > 0
-                            && distance <= VoxyConfig.CONFIG.farPlayerAnimationDistance,
-                    animationTick, now);
-            activePlayers.add(tracked.uuid());
+            PlayerProxy player = this.playerProxies.get(tracked.uuid());
+            if (player == null || player.level() != level) {
+                player = new PlayerProxy(level, tracked.uuid(), tracked.name());
+                this.playerProxies.put(tracked.uuid(), player);
+            }
+            player.apply(tracked, positionX, positionY, positionZ, maximumDistance,
+                    animationDistance > 0 && distanceSquared <= animationDistanceSquared,
+                    animationTick, progress);
+            this.activePlayers.add(tracked.uuid());
 
             if (tracked.hasVehicle()) {
                 Entity liveVehicle = level.getEntity(tracked.vehicleEntityId());
@@ -121,49 +146,59 @@ final class FarEntityRenderer {
                 Entity vehicle = useLiveVehicle ? liveVehicle : this.getVehicleProxy(level, tracked);
                 if (vehicle != null) {
                     if (!useLiveVehicle) {
-                        this.applyVehicleState(vehicle, tracked, now);
-                        activeProxyVehicles.add(tracked.vehicleUuid());
+                        this.applyVehicleState(vehicle, tracked, progress);
+                        this.activeProxyVehicles.add(tracked.vehicleUuid());
                     }
-                    player.startRiding(vehicle);
-                    if (!useLiveVehicle && renderedProxyVehicles.add(tracked.vehicleUuid())) {
-                        Vec3 vehiclePosition = tracked.renderVehiclePosition(now);
+                    if (player.getVehicle() != vehicle) {
+                        if (player.isPassenger()) player.stopRiding();
+                        player.startRiding(vehicle);
+                    }
+                    if (!useLiveVehicle && this.renderedProxyVehicles.add(tracked.vehicleUuid())) {
                         poseStack.pushPose();
                         dispatcher.render(vehicle,
-                                vehiclePosition.x - cameraPosition.x,
-                                vehiclePosition.y - cameraPosition.y,
-                                vehiclePosition.z - cameraPosition.z,
-                                tracked.renderVehicleYaw(now), 0.0F,
+                                tracked.renderVehicleX(progress) - cameraPosition.x,
+                                tracked.renderVehicleY(progress) - cameraPosition.y,
+                                tracked.renderVehicleZ(progress) - cameraPosition.z,
+                                tracked.renderVehicleYaw(progress), 0.0F,
                                 poseStack, buffers, LightTexture.FULL_BRIGHT);
                         poseStack.popPose();
+                        renderedAny = true;
                     }
+                } else if (player.isPassenger()) {
+                    player.stopRiding();
                 }
+            } else if (player.isPassenger()) {
+                player.stopRiding();
             }
 
             poseStack.pushPose();
             dispatcher.render(player,
-                    position.x - cameraPosition.x,
-                    position.y - cameraPosition.y,
-                    position.z - cameraPosition.z,
-                    tracked.renderBodyYaw(now), 0.0F,
+                    positionX - cameraPosition.x,
+                    positionY - cameraPosition.y,
+                    positionZ - cameraPosition.z,
+                    tracked.renderBodyYaw(progress), 0.0F,
                     poseStack, buffers, LightTexture.FULL_BRIGHT);
             poseStack.popPose();
+            renderedAny = true;
         }
 
-        buffers.endBatch();
-        this.playerProxies.entrySet().removeIf(entry -> {
-            if (!activePlayers.contains(entry.getKey())) {
+        if (renderedAny) buffers.endBatch();
+        Iterator<Map.Entry<UUID, PlayerProxy>> playerIterator = this.playerProxies.entrySet().iterator();
+        while (playerIterator.hasNext()) {
+            Map.Entry<UUID, PlayerProxy> entry = playerIterator.next();
+            if (!this.activePlayers.contains(entry.getKey())) {
                 entry.getValue().stopRiding();
-                return true;
+                playerIterator.remove();
             }
-            return false;
-        });
-        this.vehicleProxies.entrySet().removeIf(entry -> {
-            if (!activeProxyVehicles.contains(entry.getKey())) {
+        }
+        Iterator<Map.Entry<UUID, Entity>> vehicleIterator = this.vehicleProxies.entrySet().iterator();
+        while (vehicleIterator.hasNext()) {
+            Map.Entry<UUID, Entity> entry = vehicleIterator.next();
+            if (!this.activeProxyVehicles.contains(entry.getKey())) {
                 entry.getValue().ejectPassengers();
-                return true;
+                vehicleIterator.remove();
             }
-            return false;
-        });
+        }
     }
 
     private Entity getVehicleProxy(ClientLevel level, TrackedPlayer tracked) {
@@ -195,15 +230,17 @@ final class FarEntityRenderer {
         }
     }
 
-    private static void applyVehicleState(Entity vehicle, TrackedPlayer tracked, long now) {
-        Vec3 position = tracked.renderVehiclePosition(now);
-        float yaw = tracked.renderVehicleYaw(now);
-        float pitch = tracked.renderVehiclePitch(now);
+    private static void applyVehicleState(Entity vehicle, TrackedPlayer tracked, float progress) {
+        double x = tracked.renderVehicleX(progress);
+        double y = tracked.renderVehicleY(progress);
+        double z = tracked.renderVehicleZ(progress);
+        float yaw = tracked.renderVehicleYaw(progress);
+        float pitch = tracked.renderVehiclePitch(progress);
         vehicle.setOldPosAndRot();
-        vehicle.xo = vehicle.xOld = position.x;
-        vehicle.yo = vehicle.yOld = position.y;
-        vehicle.zo = vehicle.zOld = position.z;
-        vehicle.moveTo(position.x, position.y, position.z, yaw, pitch);
+        vehicle.xo = vehicle.xOld = x;
+        vehicle.yo = vehicle.yOld = y;
+        vehicle.zo = vehicle.zOld = z;
+        vehicle.moveTo(x, y, z, yaw, pitch);
         vehicle.setYRot(yaw);
         vehicle.yRotO = yaw;
         vehicle.setXRot(pitch);
@@ -243,8 +280,19 @@ final class FarEntityRenderer {
     private static final class PlayerProxy extends RemotePlayer {
         private final UUID trackedUuid;
         private int maximumDistance;
-        private Vec3 lastWalkPosition;
+        private double lastWalkX;
+        private double lastWalkZ;
+        private boolean hasLastWalkPosition;
         private int lastWalkTick = Integer.MIN_VALUE;
+        private ItemSnapshot mainHandSnapshot;
+        private ItemSnapshot offHandSnapshot;
+        private ItemSnapshot feetSnapshot;
+        private ItemSnapshot legsSnapshot;
+        private ItemSnapshot chestSnapshot;
+        private ItemSnapshot headSnapshot;
+        private String customName;
+        private boolean customNameVisible;
+        private int appliedGeneration = Integer.MIN_VALUE;
 
         PlayerProxy(ClientLevel level, UUID uuid, String name) {
             super(level, new GameProfile(uuid, name));
@@ -255,18 +303,18 @@ final class FarEntityRenderer {
             this.setInvisible(false);
         }
 
-        void apply(TrackedPlayer tracked, Vec3 position, int maximumDistance,
-                   boolean animate, int animationTick, long now) {
-            float bodyYaw = tracked.renderBodyYaw(now);
-            float headYaw = tracked.renderHeadYaw(now);
-            float pitch = tracked.renderPitch(now);
+        void apply(TrackedPlayer tracked, double x, double y, double z, int maximumDistance,
+                   boolean animate, int animationTick, float progress) {
+            float bodyYaw = tracked.renderBodyYaw(progress);
+            float headYaw = tracked.renderHeadYaw(progress);
+            float pitch = tracked.renderPitch(progress);
             this.maximumDistance = maximumDistance;
             this.tickCount = animationTick;
             this.setOldPosAndRot();
-            this.xo = this.xOld = position.x;
-            this.yo = this.yOld = position.y;
-            this.zo = this.zOld = position.z;
-            this.moveTo(position.x, position.y, position.z, bodyYaw, pitch);
+            this.xo = this.xOld = x;
+            this.yo = this.yOld = y;
+            this.zo = this.zOld = z;
+            this.moveTo(x, y, z, bodyYaw, pitch);
             this.setYRot(bodyYaw);
             this.yRotO = bodyYaw;
             this.setXRot(pitch);
@@ -275,23 +323,58 @@ final class FarEntityRenderer {
             this.yBodyRotO = bodyYaw;
             this.setYHeadRot(headYaw);
             this.yHeadRotO = headYaw;
-            this.setShiftKeyDown(tracked.sneaking());
-            this.setSwimming(tracked.swimming());
-            this.setPose(pose(tracked));
-            this.setItemSlot(EquipmentSlot.MAINHAND, item(tracked.mainHand()));
-            this.setItemSlot(EquipmentSlot.OFFHAND, item(tracked.offHand()));
-            this.setItemSlot(EquipmentSlot.FEET, item(tracked.feet()));
-            this.setItemSlot(EquipmentSlot.LEGS, item(tracked.legs()));
-            this.setItemSlot(EquipmentSlot.CHEST, item(tracked.chest()));
-            this.setItemSlot(EquipmentSlot.HEAD, item(tracked.head()));
-            this.setCustomName(Component.literal(tracked.name()));
-            this.setCustomNameVisible(VoxyConfig.CONFIG.renderFarPlayerNames);
-            this.updateWalkAnimation(position, tracked, animate, animationTick);
+            if (this.appliedGeneration != tracked.generation()) {
+                this.appliedGeneration = tracked.generation();
+                if (this.isShiftKeyDown() != tracked.sneaking()) this.setShiftKeyDown(tracked.sneaking());
+                if (this.isSwimming() != tracked.swimming()) this.setSwimming(tracked.swimming());
+                Pose pose = pose(tracked);
+                if (this.getPose() != pose) this.setPose(pose);
+                this.updateEquipment(tracked);
+                if (!Objects.equals(this.customName, tracked.name())) {
+                    this.customName = tracked.name();
+                    this.setCustomName(Component.literal(this.customName));
+                }
+            }
+            boolean showName = VoxyConfig.CONFIG.renderFarPlayerNames;
+            if (this.customNameVisible != showName) {
+                this.customNameVisible = showName;
+                this.setCustomNameVisible(showName);
+            }
+            this.updateWalkAnimation(x, z, tracked, animate, animationTick);
         }
 
-        private void updateWalkAnimation(Vec3 position, TrackedPlayer tracked, boolean animate, int tick) {
-            if (this.lastWalkPosition == null || tick == this.lastWalkTick) {
-                this.lastWalkPosition = position;
+        private void updateEquipment(TrackedPlayer tracked) {
+            if (!Objects.equals(this.mainHandSnapshot, tracked.mainHand())) {
+                this.mainHandSnapshot = tracked.mainHand();
+                this.setItemSlot(EquipmentSlot.MAINHAND, item(this.mainHandSnapshot));
+            }
+            if (!Objects.equals(this.offHandSnapshot, tracked.offHand())) {
+                this.offHandSnapshot = tracked.offHand();
+                this.setItemSlot(EquipmentSlot.OFFHAND, item(this.offHandSnapshot));
+            }
+            if (!Objects.equals(this.feetSnapshot, tracked.feet())) {
+                this.feetSnapshot = tracked.feet();
+                this.setItemSlot(EquipmentSlot.FEET, item(this.feetSnapshot));
+            }
+            if (!Objects.equals(this.legsSnapshot, tracked.legs())) {
+                this.legsSnapshot = tracked.legs();
+                this.setItemSlot(EquipmentSlot.LEGS, item(this.legsSnapshot));
+            }
+            if (!Objects.equals(this.chestSnapshot, tracked.chest())) {
+                this.chestSnapshot = tracked.chest();
+                this.setItemSlot(EquipmentSlot.CHEST, item(this.chestSnapshot));
+            }
+            if (!Objects.equals(this.headSnapshot, tracked.head())) {
+                this.headSnapshot = tracked.head();
+                this.setItemSlot(EquipmentSlot.HEAD, item(this.headSnapshot));
+            }
+        }
+
+        private void updateWalkAnimation(double x, double z, TrackedPlayer tracked, boolean animate, int tick) {
+            if (!this.hasLastWalkPosition || tick == this.lastWalkTick) {
+                this.lastWalkX = x;
+                this.lastWalkZ = z;
+                this.hasLastWalkPosition = true;
                 this.lastWalkTick = tick;
                 return;
             }
@@ -299,12 +382,13 @@ final class FarEntityRenderer {
             float speed = 0.0F;
             if (animate && !tracked.gliding() && !tracked.swimming() && !tracked.hasVehicle()) {
                 speed = Math.min((float) Mth.length(
-                        position.x - this.lastWalkPosition.x, 0.0D,
-                        position.z - this.lastWalkPosition.z) * 4.0F, 1.0F);
+                        x - this.lastWalkX, 0.0D,
+                        z - this.lastWalkZ) * 4.0F, 1.0F);
             }
             this.walkAnimation.setSpeed(speed);
             this.walkAnimation.update(speed, WALK_ANIMATION_SCALE);
-            this.lastWalkPosition = position;
+            this.lastWalkX = x;
+            this.lastWalkZ = z;
         }
 
         @Override

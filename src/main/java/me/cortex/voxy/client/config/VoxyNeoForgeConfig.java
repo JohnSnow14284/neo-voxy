@@ -96,16 +96,6 @@ public final class VoxyNeoForgeConfig {
             .comment("Allow other Voxy clients on the same server to receive your far-player snapshot.")
             .define("shareFarPlayerPosition", true);
 
-    private static final ModConfigSpec.BooleanValue ENABLE_FAR_CREATE_CONTRAPTION_RENDERING = BUILDER
-            .comment("Render Create contraptions and trains beyond vanilla entity/chunk render distance.",
-                     "Multiplayer requires Voxy on the server. Create remains optional.")
-            .define("enableFarCreateContraptionRendering", true);
-
-    private static final ModConfigSpec.IntValue FAR_CREATE_CONTRAPTION_DISTANCE = BUILDER
-            .comment("Maximum Create contraption render distance in blocks.",
-                     "0 follows Voxy's LOD render distance; any other value is an absolute distance.")
-            .defineInRange("farCreateContraptionDistance", 0, 0, 32768);
-
     private static final ModConfigSpec.BooleanValue RENDER_STATISTICS = BUILDER
             .comment("Show render statistics in F3 debug screen",
                      "Displays LOD traversal counts, visible sections, and quad counts")
@@ -137,8 +127,6 @@ public final class VoxyNeoForgeConfig {
         VoxyConfig.CONFIG.renderFarPlayerNames = RENDER_FAR_PLAYER_NAMES.get();
         VoxyConfig.CONFIG.farPlayerAnimationDistance = FAR_PLAYER_ANIMATION_DISTANCE.get();
         VoxyConfig.CONFIG.shareFarPlayerPosition = SHARE_FAR_PLAYER_POSITION.get();
-        VoxyConfig.CONFIG.enableFarCreateContraptionRendering = ENABLE_FAR_CREATE_CONTRAPTION_RENDERING.get();
-        VoxyConfig.CONFIG.farCreateContraptionDistance = FAR_CREATE_CONTRAPTION_DISTANCE.get();
         VoxyConfig.CONFIG.sanitize();
 
         RenderStatistics.enabled = RENDER_STATISTICS.get();
@@ -164,8 +152,6 @@ public final class VoxyNeoForgeConfig {
         RENDER_FAR_PLAYER_NAMES.set(VoxyConfig.CONFIG.renderFarPlayerNames);
         FAR_PLAYER_ANIMATION_DISTANCE.set(VoxyConfig.CONFIG.farPlayerAnimationDistance);
         SHARE_FAR_PLAYER_POSITION.set(VoxyConfig.CONFIG.shareFarPlayerPosition);
-        ENABLE_FAR_CREATE_CONTRAPTION_RENDERING.set(VoxyConfig.CONFIG.enableFarCreateContraptionRendering);
-        FAR_CREATE_CONTRAPTION_DISTANCE.set(VoxyConfig.CONFIG.farCreateContraptionDistance);
 
         RenderStatistics.enabled = RENDER_STATISTICS.get();
     }

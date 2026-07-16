@@ -85,6 +85,10 @@ public class VoxyRenderSystem {
     private float capturedFogStart;
     private float capturedFogEnd;
     private final float[] capturedFogColor = new float[4];
+    private final int[] savedBufferBindings = new int[10];
+    private final int[] viewportDimensions = new int[4];
+    private final Matrix4f projectionScratch = new Matrix4f();
+    private final Matrix4f modifiedProjectionScratch = new Matrix4f();
 
     public void setCapturedFog(float fogStart, float fogEnd, float[] fogColor) {
         this.capturedFogStart = fogStart;
@@ -107,8 +111,6 @@ public class VoxyRenderSystem {
         world.acquireRef();
         Logger.info("Creating Voxy render system");
 
-        System.gc();
-
         if (Minecraft.getInstance().options.renderDistance().get()<3) {
             String msg = "Voxy: Having a vanilla render distance of 2 can cause rare culling near the edge of your screen issues, please use 3 or more";
             Logger.warn(msg);
@@ -116,9 +118,8 @@ public class VoxyRenderSystem {
         }
 
         //Fking HATE EVERYTHING AAAAAAAAAAAAAAAA
-        int[] oldBufferBindings = new int[10];
-        for (int i = 0; i < oldBufferBindings.length; i++) {
-            oldBufferBindings[i] = glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, i);
+        for (int i = 0; i < this.savedBufferBindings.length; i++) {
+            this.savedBufferBindings[i] = glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, i);
         }
 
         try {
@@ -186,8 +187,8 @@ public class VoxyRenderSystem {
             throw e;
         }
 
-        for (int i = 0; i < oldBufferBindings.length; i++) {
-            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, oldBufferBindings[i]);
+        for (int i = 0; i < this.savedBufferBindings.length; i++) {
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, this.savedBufferBindings[i]);
         }
 
         for (int i = 0; i < 12; i++) {
@@ -214,11 +215,10 @@ public class VoxyRenderSystem {
         //cameraY += 100;
         var voxyProjection = computeProjectionMat(this.properties, vanillaProjection);
 
-        int[] dims = new int[4];
-        glGetIntegerv(GL_VIEWPORT, dims);
+        glGetIntegerv(GL_VIEWPORT, this.viewportDimensions);
 
-        int width = dims[2];
-        int height = dims[3];
+        int width = this.viewportDimensions[2];
+        int height = this.viewportDimensions[3];
 
         {//Apply render scaling factor
             var factor = this.pipeline.getRenderScalingFactor();
@@ -235,7 +235,7 @@ public class VoxyRenderSystem {
         viewport
                 .setVanillaProjection(vanillaProjection)
                 .setProjection(voxyProjection)
-                .setModelView(new Matrix4f(modelView))
+                .setModelView(modelView)
                 .setCamera(cameraX, cameraY, cameraZ)
                 .setScreenSize(width, height)
                 .update();
@@ -267,18 +267,15 @@ public class VoxyRenderSystem {
         GPUTiming.INSTANCE.marker();//Start marker
         TimingStatistics.main.start();
 
-        //TODO: optimize
-        int[] oldBufferBindings = new int[10];
-        for (int i = 0; i < oldBufferBindings.length; i++) {
-            oldBufferBindings[i] = glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, i);
+        for (int i = 0; i < this.savedBufferBindings.length; i++) {
+            this.savedBufferBindings[i] = glGetIntegeri(GL_SHADER_STORAGE_BUFFER_BINDING, i);
         }
 
 
         int oldFB = GL11.glGetInteger(GL_DRAW_FRAMEBUFFER_BINDING);
         int boundFB = oldFB;
 
-        int[] dims = new int[4];
-        glGetIntegerv(GL_VIEWPORT, dims);
+        glGetIntegerv(GL_VIEWPORT, this.viewportDimensions);
 
         glViewport(0, 0, viewport.width, viewport.height);
 
@@ -303,7 +300,7 @@ public class VoxyRenderSystem {
 
         GPUTiming.INSTANCE.marker();
         // Run the LOD pipeline.
-        this.pipeline.runPipeline(viewport, boundFB, dims[2], dims[3]);
+        this.pipeline.runPipeline(viewport, boundFB, this.viewportDimensions[2], this.viewportDimensions[3]);
         GPUTiming.INSTANCE.marker();
 
 
@@ -326,9 +323,7 @@ public class VoxyRenderSystem {
             // frame, so changing the LOD build pressure option is hot-reloadable and does not need
             // renderer recreation.
             long modelBakeBudget = this.getModelBakeBudgetNanos();
-            do {
-                this.modelService.tick(modelBakeBudget);
-            } while (VoxyClient.isFrexActive() && !this.modelService.areQueuesEmpty());
+            this.modelService.tick(modelBakeBudget);
             TimingStatistics.H.stop();
         }
         GPUTiming.INSTANCE.marker();
@@ -337,7 +332,8 @@ public class VoxyRenderSystem {
         GPUTiming.INSTANCE.tick();
 
         glBindFramebuffer(GlConst.GL_FRAMEBUFFER, oldFB);
-        glViewport(dims[0], dims[1], dims[2], dims[3]);
+        glViewport(this.viewportDimensions[0], this.viewportDimensions[1],
+                this.viewportDimensions[2], this.viewportDimensions[3]);
 
         {//Reset state manager stuffs
             glUseProgram(0);
@@ -356,8 +352,8 @@ public class VoxyRenderSystem {
             IrisUtil.clearIrisSamplers();
 
             // Restore the shader-storage bindings captured before the LOD pass.
-            for (int i = 0; i < oldBufferBindings.length; i++) {
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, oldBufferBindings[i]);
+        for (int i = 0; i < this.savedBufferBindings.length; i++) {
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, this.savedBufferBindings[i]);
             }
 
         }
@@ -397,16 +393,17 @@ public class VoxyRenderSystem {
     private void autoBalanceSubDivSize() {
         // Only raise quality when the mesh queue is under control.
         boolean canDecreaseSize = this.renderGen.getTaskCount() < 300;
+        int fps = Minecraft.getInstance().getFps();
         int MIN_FPS = 55;
         int MAX_FPS = 65;
         float INCREASE_PER_SECOND = 60;
         float DECREASE_PER_SECOND = 30;
-        if (Minecraft.getInstance().getFps() < MIN_FPS) {
-            VoxyConfig.CONFIG.subDivisionSize = Math.min(VoxyConfig.CONFIG.subDivisionSize + INCREASE_PER_SECOND / Math.max(1f, Minecraft.getInstance().getFps()), 256);
+        if (fps < MIN_FPS) {
+            VoxyConfig.CONFIG.subDivisionSize = Math.min(VoxyConfig.CONFIG.subDivisionSize + INCREASE_PER_SECOND / Math.max(1f, fps), 256);
         }
 
-        if (MAX_FPS < Minecraft.getInstance().getFps() && canDecreaseSize) {
-            VoxyConfig.CONFIG.subDivisionSize = Math.max(VoxyConfig.CONFIG.subDivisionSize - DECREASE_PER_SECOND / Math.max(1f, Minecraft.getInstance().getFps()), 28);
+        if (MAX_FPS < fps && canDecreaseSize) {
+            VoxyConfig.CONFIG.subDivisionSize = Math.max(VoxyConfig.CONFIG.subDivisionSize - DECREASE_PER_SECOND / Math.max(1f, fps), 28);
         }
     }
 
@@ -414,11 +411,11 @@ public class VoxyRenderSystem {
         return Minecraft.getInstance().options.getEffectiveRenderDistance() * 16;
     }
 
-    private static Matrix4f computeProjectionMat(RenderProperties properties, Matrix4fc base) {
+    private Matrix4f computeProjectionMat(RenderProperties properties, Matrix4fc base) {
 
         // Preserve projection changes applied by Minecraft, such as view bobbing.
         var rawMCProj = RenderSystem.getProjectionMatrix();
-        var extraProjection = rawMCProj.invert(new Matrix4f()).mul(base);
+        var extraProjection = rawMCProj.invert(this.projectionScratch).mul(base);
 
         float near = getRenderDistance() <= 32.0f ? 8.0f : 16.0f;
         near = VoxyClient.disableSodiumChunkRender() ? 0.1f : near;
@@ -433,7 +430,7 @@ public class VoxyRenderSystem {
         }
 
         return extraProjection.mulLocal(
-                new Matrix4f(rawMCProj)
+                this.modifiedProjectionScratch.set(rawMCProj)
                 .m22((properties.isZero2One()?far:(far+near)) / (near - far))
                 .m32((properties.isZero2One()?far:(far+far)) * near / (near - far))
         );

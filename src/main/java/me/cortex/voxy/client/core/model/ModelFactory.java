@@ -297,9 +297,10 @@ public class ModelFactory {
         return (this.blockStatesInFlight.size()!=0)||(!this.bakeQueue.isEmpty())||!this.biomeQueue.isEmpty();
     }
 
-    public void processUploads() {
+    public void processUploads(long totalBudgetNanos) {
         var upload = this.uploadResults.poll();
         if (upload==null) return;
+        long deadline = System.nanoTime() + Math.max(0L, totalBudgetNanos);
 
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
         glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
@@ -309,7 +310,8 @@ public class ModelFactory {
             upload.upload(this.storage);
             upload.free();
             upload = this.uploadResults.poll();
-        } while (upload != null);
+        } while (upload != null && System.nanoTime() < deadline);
+        if (upload != null) this.uploadResults.addFirst(upload);
         UploadStream.INSTANCE.commit();
     }
 

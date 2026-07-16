@@ -66,6 +66,10 @@ bool hasRequested(in UnpackedNode node) {
     return (node.flags&1u) != 0u;
 }
 
+uint getRequestFrame(in UnpackedNode node) {
+    return (node.flags >> 8u) & 0xFFu;
+}
+
 uint getMesh(in UnpackedNode node) {
     return node.meshPtr;
 }
@@ -93,9 +97,15 @@ uint getTransformIndex(in UnpackedNode node) {
 
 //-----------------------------------
 
-void markRequested(inout UnpackedNode node) {
-    node.flags |= 1u;
-    nodes[node.nodeId].z |= 1u<<24;
+void markRequested(inout UnpackedNode node, uint requestFrame) {
+    uint compactFrame = requestFrame & 0xFFu;
+    node.flags = (node.flags & 0xFFu) | (compactFrame << 8u) | 1u;
+    atomicOr(nodes[node.nodeId].z, 1u << 24u);
+    // The high byte of W is currently unused by CPU node metadata. Keeping a
+    // tiny submission timestamp here lets a lost GPU->CPU request self-heal
+    // without scanning the hierarchy or allocating another per-node buffer.
+    atomicAnd(nodes[node.nodeId].w, 0x00FFFFFFu);
+    atomicOr(nodes[node.nodeId].w, compactFrame << 24u);
 }
 
 void debugDumpNode(in UnpackedNode node) {

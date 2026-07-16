@@ -29,6 +29,7 @@ import java.util.HexFormat;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 
 public final class DomumOrnamentumCompat {
     public static final String VARIANT_TYPE = "domum_ornamentum";
@@ -38,7 +39,9 @@ public final class DomumOrnamentumCompat {
     private static final String MODEL_PROPERTIES = PACKAGE_PREFIX + ".client.model.properties.ModProperties";
     private static final String TEXTURE_DATA_CLASS = PACKAGE_PREFIX + ".client.model.data.MaterialTextureData";
 
-    private static final ThreadLocal<int[]> SECTION_IDS = new ThreadLocal<>();
+    private static final Predicate<BlockState> DOMUM_STATE_PREDICATE = DomumOrnamentumCompat::isDomumState;
+    private static final ThreadLocal<SectionMappings> SECTION_MAPPINGS =
+            ThreadLocal.withInitial(SectionMappings::new);
     private static final Map<Mapper, Map<Integer, BakePlan>> BAKE_PLANS = new ConcurrentHashMap<>();
     private static final Map<Object, VariantDescriptor> DESCRIPTORS = new ConcurrentHashMap<>();
 
@@ -60,8 +63,31 @@ public final class DomumOrnamentumCompat {
         }
     };
 
+    private static final ClassValue<Optional<Method>> SERIALIZE_METHODS = new ClassValue<>() {
+        @Override
+        protected Optional<Method> computeValue(Class<?> type) {
+            try {
+                return Optional.of(type.getMethod("serializeNBT"));
+            } catch (ReflectiveOperationException ignored) {
+                return Optional.empty();
+            }
+        }
+    };
+
+    private static final ClassValue<Optional<Method>> TEXTURED_COMPONENT_METHODS = new ClassValue<>() {
+        @Override
+        protected Optional<Method> computeValue(Class<?> type) {
+            try {
+                return Optional.of(type.getMethod("getTexturedComponents"));
+            } catch (ReflectiveOperationException ignored) {
+                return Optional.empty();
+            }
+        }
+    };
+
     private static volatile ModelProperty<?> materialTextureProperty;
     private static volatile boolean materialTexturePropertyMissing;
+    private static volatile Method textureDataDeserializer;
 
     private DomumOrnamentumCompat() {
     }
@@ -87,14 +113,17 @@ public final class DomumOrnamentumCompat {
     }
 
     public static void beginSection(Mapper mapper, LevelChunk chunk, LevelChunkSection section, int sectionY) {
-        if (!LOADED || mapper == null || chunk == null || section == null || chunk.getBlockEntities().isEmpty()) {
-            SECTION_IDS.remove();
+        if (!LOADED) {
             return;
         }
+        SectionMappings mappings = SECTION_MAPPINGS.get();
+        mappings.reset();
+        if (mapper == null || chunk == null || section == null || chunk.getBlockEntities().isEmpty()
+                || !section.maybeHas(DOMUM_STATE_PREDICATE)) return;
 
-        int[] mappedIds = null;
         int minY = sectionY << 4;
         int maxY = minY + 15;
+        Map<Integer, BakePlan> plans = null;
 
         for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
             if (blockEntity == null || !DOMUM_BLOCK_ENTITIES.get(blockEntity.getClass())) {
@@ -107,10 +136,14 @@ public final class DomumOrnamentumCompat {
             }
 
             try {
-                ModelData modelData = blockEntity.getModelData();
-                Object textureData = extractTextureData(modelData);
+                // Domum exposes the immutable MaterialTextureData directly from
+                // its block entity. This avoids building a complete model-data
+                // object for every re-ingested section on a background thread.
+                Object textureData = extractTextureData(blockEntity);
+                ModelData modelData = ModelData.EMPTY;
                 if (textureData == null) {
-                    textureData = extractTextureData(blockEntity);
+                    modelData = blockEntity.getModelData();
+                    textureData = extractTextureData(modelData);
                 }
                 if (textureData == null) {
                     continue;
@@ -132,41 +165,37 @@ public final class DomumOrnamentumCompat {
 
                 int mappedId = mapper.getIdForBlockStateVariant(
                         state, VARIANT_TYPE, descriptor.key(), descriptor.data());
-                plansFor(mapper).computeIfAbsent(mappedId,
-                        ignored -> createBakePlan(state, modelData, descriptor));
-
-                if (mappedIds == null) {
-                    mappedIds = new int[4096];
+                if (plans == null) plans = plansFor(mapper);
+                if (plans.get(mappedId) == null) {
+                    ModelData resolvedModelData = modelData == ModelData.EMPTY
+                            ? createModelData(textureData) : modelData;
+                    plans.putIfAbsent(mappedId, createBakePlan(state, resolvedModelData, descriptor));
                 }
-                mappedIds[lx | (lz << 4) | (ly << 8)] = mappedId;
+
+                mappings.put(lx | (lz << 4) | (ly << 8), mappedId);
             } catch (Throwable ignored) {
             }
         }
-
-        if (mappedIds == null) {
-            SECTION_IDS.remove();
-        } else {
-            SECTION_IDS.set(mappedIds);
-        }
+        mappings.active = mappings.touchedCount != 0;
     }
 
     public static void endSection() {
-        SECTION_IDS.remove();
+        if (LOADED) SECTION_MAPPINGS.get().active = false;
     }
 
     public static boolean hasSectionMappings() {
-        return LOADED && SECTION_IDS.get() != null;
+        return LOADED && SECTION_MAPPINGS.get().active;
     }
 
     public static int mapBlockId(Mapper mapper, BlockState state, int baseBlockId, int localIndex) {
         if (!LOADED || localIndex < 0 || localIndex >= 4096) {
             return baseBlockId;
         }
-        int[] mappedIds = SECTION_IDS.get();
-        if (mappedIds == null) {
+        SectionMappings mappings = SECTION_MAPPINGS.get();
+        if (!mappings.active) {
             return baseBlockId;
         }
-        int mappedId = mappedIds[localIndex];
+        int mappedId = mappings.ids[localIndex];
         return mappedId == 0 ? baseBlockId : mappedId;
     }
 
@@ -265,13 +294,25 @@ public final class DomumOrnamentumCompat {
     }
 
     private static CompoundTag serializeTextureData(Object textureData) throws ReflectiveOperationException {
-        Object value = textureData.getClass().getMethod("serializeNBT").invoke(textureData);
+        Optional<Method> method = SERIALIZE_METHODS.get(textureData.getClass());
+        if (method.isEmpty()) return null;
+        Object value = method.get().invoke(textureData);
         return value instanceof CompoundTag tag ? tag : null;
     }
 
     private static Object deserializeTextureData(CompoundTag data) throws ReflectiveOperationException {
-        Class<?> type = Class.forName(TEXTURE_DATA_CLASS);
-        return type.getMethod("deserializeFromNBT", CompoundTag.class).invoke(null, data.copy());
+        Method method = textureDataDeserializer;
+        if (method == null) {
+            synchronized (DomumOrnamentumCompat.class) {
+                method = textureDataDeserializer;
+                if (method == null) {
+                    Class<?> type = Class.forName(TEXTURE_DATA_CLASS);
+                    method = type.getMethod("deserializeFromNBT", CompoundTag.class);
+                    textureDataDeserializer = method;
+                }
+            }
+        }
+        return method.invoke(null, data.copy());
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
@@ -281,20 +322,7 @@ public final class DomumOrnamentumCompat {
             return ModelData.EMPTY;
         }
         try {
-            Object builder = ModelData.class.getMethod("builder").invoke(null);
-            Method with = null;
-            for (Method method : builder.getClass().getMethods()) {
-                if (method.getName().equals("with") && method.getParameterCount() == 2) {
-                    with = method;
-                    break;
-                }
-            }
-            if (with == null) {
-                return ModelData.EMPTY;
-            }
-            with.invoke(builder, property, textureData);
-            Object result = builder.getClass().getMethod("build").invoke(builder);
-            return result instanceof ModelData data ? data : ModelData.EMPTY;
+            return ModelData.builder().with((ModelProperty) property, textureData).build();
         } catch (Throwable ignored) {
             return ModelData.EMPTY;
         }
@@ -302,7 +330,9 @@ public final class DomumOrnamentumCompat {
 
     private static BlockState selectMaterialState(Object textureData) {
         try {
-            Object value = textureData.getClass().getMethod("getTexturedComponents").invoke(textureData);
+            Optional<Method> method = TEXTURED_COMPONENT_METHODS.get(textureData.getClass());
+            if (method.isEmpty()) return null;
+            Object value = method.get().invoke(textureData);
             if (!(value instanceof Map<?, ?> components) || components.isEmpty()) {
                 return null;
             }
@@ -424,9 +454,34 @@ public final class DomumOrnamentumCompat {
         return BAKE_PLANS.computeIfAbsent(mapper, ignored -> new ConcurrentHashMap<>());
     }
 
+    private static final class SectionMappings {
+        private final int[] ids = new int[4096];
+        private final short[] touched = new short[4096];
+        private int touchedCount;
+        private boolean active;
+
+        private void reset() {
+            for (int index = 0; index < this.touchedCount; index++) {
+                this.ids[Short.toUnsignedInt(this.touched[index])] = 0;
+            }
+            this.touchedCount = 0;
+            this.active = false;
+        }
+
+        private void put(int localIndex, int mappedId) {
+            if (this.ids[localIndex] == 0) {
+                this.touched[this.touchedCount++] = (short) localIndex;
+            }
+            this.ids[localIndex] = mappedId;
+        }
+    }
+
     public static void closeMapper(Mapper mapper) {
         if (LOADED && mapper != null) {
             BAKE_PLANS.remove(mapper);
+            if (BAKE_PLANS.isEmpty()) {
+                DESCRIPTORS.clear();
+            }
         }
     }
 

@@ -19,11 +19,6 @@ base {
 }
 
 repositories {
-    maven {
-        name = "Create"
-        url = "https://maven.createmod.net"
-    }
-
     exclusiveContent {
         forRepository {
             maven {
@@ -144,11 +139,6 @@ dependencies {
 
     compileOnly("curse.maven:irisshaders-455508:6661598")
 
-    // Optional Create compatibility. These are compile-time only: Voxy still loads
-    // normally when Create/Flywheel are not installed.
-    compileOnly("com.simibubi.create:create-1.21.1:6.0.10-280:slim") { transitive = false }
-    compileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-1.21.1:1.0.6")
-    compileOnly("net.createmod.ponder:ponder-neoforge:1.0.82+mc1.21.1")
 }
 
 

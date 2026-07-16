@@ -46,7 +46,7 @@ public class ModelBakerySubsystem {
             Logger.error(this.processingThreadException.getStackTrace().toString(), this.processingThreadException);
             throw new RuntimeException(this.processingThreadException);
         }
-        this.factory.processUploads();
+        this.factory.processUploads(totalBudget);
     }
 
     public void shutdown() {

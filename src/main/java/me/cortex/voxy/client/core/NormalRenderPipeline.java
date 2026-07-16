@@ -10,8 +10,6 @@ import me.cortex.voxy.client.core.rendering.hierachical.HierarchicalOcclusionTra
 import me.cortex.voxy.client.core.rendering.hierachical.NodeCleaner;
 import me.cortex.voxy.client.core.rendering.post.FullscreenBlit;
 import me.cortex.voxy.client.core.util.GPUTiming;
-import net.minecraft.client.Minecraft;
-import net.minecraft.world.level.material.FogType;
 import org.joml.Matrix4f;
 
 import java.util.List;
@@ -49,6 +47,7 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
     private final FullscreenBlit finalBlit;
 
     private final SSAO ssao;
+    private final Matrix4f targetTransform = new Matrix4f();
 
     protected NormalRenderPipeline(RenderProperties properties, AsyncNodeManager nodeManager, NodeCleaner nodeCleaner, HierarchicalOcclusionTraverser traversal, BooleanSupplier frexSupplier) {
         super(properties, nodeManager, nodeCleaner, traversal, frexSupplier, false);
@@ -102,13 +101,9 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
         float fogEnd = vrs != null ? vrs.getCapturedFogEnd()   : RenderSystem.getShaderFogEnd();
         float[] fogColor = vrs != null ? vrs.getCapturedFogColor() : RenderSystem.getShaderFogColor();
 
-        float renderDistance = Minecraft.getInstance().gameRenderer.getRenderDistance();
         boolean useFog = VoxyConfig.CONFIG.useEnvironmentalFog
                 && VoxyConfig.CONFIG.fogIntensity > 0.0f
                 && Math.abs(fogEnd - fogStart) > 1.0f;
-        var camera = Minecraft.getInstance().gameRenderer.getMainCamera();
-        boolean cameraInFluid = camera != null && camera.getFluidInCamera() != FogType.NONE;
-        boolean fogCoversAllRendering = cameraInFluid || (useFog && fogEnd < renderDistance);
 
         if (useFog) {
             glUniform2f(4, fogStart, fogEnd);
@@ -126,16 +121,15 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
 
         glBindTextureUnit(3, this.colourSSAOTex.id);
 
-        if (!fogCoversAllRendering) {
-            glEnable(GL_BLEND);
-            // The LOD target stores straight-alpha translucency.
-            glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-            AbstractRenderPipeline.transformBlitDepth(this.finalBlit, this.fb.getDepthTex().id, sourceFrameBuffer, viewport, new Matrix4f(viewport.vanillaProjection).mul(viewport.modelView));
-            glDisable(GL_BLEND);
-        } else {
-            glDisable(GL_STENCIL_TEST);
-            glDisable(GL_DEPTH_TEST);
-        }
+        // Always composite the LOD target. The previous "fully fogged" shortcut
+        // ignored fog intensity/density and could drop the whole LOD image.
+        glEnable(GL_BLEND);
+        // The LOD target stores straight-alpha translucency.
+        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        AbstractRenderPipeline.transformBlitDepth(this.finalBlit, this.fb.getDepthTex().id,
+                sourceFrameBuffer, viewport,
+                this.targetTransform.set(viewport.vanillaProjection).mul(viewport.modelView));
+        glDisable(GL_BLEND);
     }
 
     @Override

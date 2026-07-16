@@ -1129,7 +1129,9 @@ public class NodeManager {
 
             //Check if the node is already in-flight, if it is, dont do any processing
             if (this.nodeData.isNodeRequestInFlight(nodeId)) {
-                Logger.warn("Tried processing a node that already has a request in flight: " + nodeId + " pos: " + WorldEngine.pprintPos(pos) + " ignoring");
+                // The GPU request marker has a timeout so a request lost during
+                // renderer/shader reload can be retried. A still-live CPU request
+                // may therefore arrive twice; silently coalesce it here.
                 return;
             }
 

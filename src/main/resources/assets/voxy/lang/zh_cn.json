@@ -40,7 +40,7 @@
   "voxy.config.general.fogDensity": "雾密度",
   "voxy.config.general.fogDensity.tooltip": "雾效密度，数值越高雾越浓",
   "voxy.config.general.skyFogDistance": "天空雾距离",
-  "voxy.config.general.skyFogDistance.tooltip": "天空雾范围，单位为区块",
+  "voxy.config.general.skyFogDistance.tooltip": "天空与 LOD 地形雾的结束距离，单位为区块",
   "voxy.config.fakesight": "扩展区块请求",
   "voxy.config.fakesight.enabled": "启用扩展区块请求",
   "voxy.config.fakesight.enabled.tooltip": "在单人游戏中为 Voxy 请求额外区块。移动时优先加载附近原版区块，停止移动后再逐级扩展 LOD 请求半径。",
@@ -50,12 +50,5 @@
   "voxy.config.general.leafLodMode.tooltip": "调节远景树叶的画质与性能。性能模式使用不透明树叶；平衡模式按叶块稳定旋转纹理、剔除不可见内部面并保留不规则 Mip 镂空，性能影响为中；质量模式保留细小透明孔洞，但 GPU 开销更高。",
   "voxy.config.general.leafLodMode.fast": "性能",
   "voxy.config.general.leafLodMode.balanced": "平衡",
-  "voxy.config.general.leafLodMode.quality": "质量",
-  "voxy.config.create": "Create 动态结构",
-  "voxy.config.create.enabled": "渲染远距离 Create 动态结构",
-  "voxy.config.create.enabled.tooltip": "在原版实体与区块渲染距离之外渲染 Create 可动结构和独立模拟的列车。多人游戏需要服务端同时安装 Voxy。",
-  "voxy.config.create.distance": "动态结构渲染距离",
-  "voxy.config.create.distance.tooltip": "远距离动态结构的最大距离；选择跟随 LOD 时使用 Voxy 当前的 LOD 渲染距离。",
-  "voxy.config.create.distance.follow_lod": "跟随 LOD 距离",
-  "voxy.config.create.distance.chunks": "%s 区块"
+  "voxy.config.general.leafLodMode.quality": "质量"
 }

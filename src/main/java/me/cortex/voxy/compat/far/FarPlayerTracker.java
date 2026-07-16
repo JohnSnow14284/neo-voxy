@@ -8,15 +8,16 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 final class FarPlayerTracker {
-    private final Map<UUID, TrackedPlayer> players = new ConcurrentHashMap<>();
-    private volatile String dimensionKey = "";
-    private volatile int generation;
+    private final Map<UUID, TrackedPlayer> players = new HashMap<>();
+    private String dimensionKey = "";
+    private int generation;
 
     void clear() {
         this.players.clear();
@@ -24,20 +25,26 @@ final class FarPlayerTracker {
         this.generation = 0;
     }
 
+    boolean isEmpty() {
+        return this.players.isEmpty();
+    }
+
     void apply(PlayerBatch batch) {
         int nextGeneration = this.generation + 1;
         this.generation = nextGeneration;
         this.dimensionKey = batch.dimensionKey();
         for (PlayerSnapshot snapshot : batch.players()) {
-            this.players.compute(snapshot.uuid(), (uuid, current) -> {
-                if (current == null) {
-                    return new TrackedPlayer(snapshot, nextGeneration);
-                }
+            TrackedPlayer current = this.players.get(snapshot.uuid());
+            if (current == null) {
+                this.players.put(snapshot.uuid(), new TrackedPlayer(snapshot, nextGeneration));
+            } else {
                 current.apply(snapshot, nextGeneration);
-                return current;
-            });
+            }
         }
-        this.players.entrySet().removeIf(entry -> entry.getValue().generation() != nextGeneration);
+        Iterator<TrackedPlayer> iterator = this.players.values().iterator();
+        while (iterator.hasNext()) {
+            if (iterator.next().generation() != nextGeneration) iterator.remove();
+        }
     }
 
     String dimensionKey() {
@@ -89,24 +96,26 @@ final class FarPlayerTracker {
             this.fromBodyYaw = this.toBodyYaw = snapshot.bodyYaw();
             this.fromHeadYaw = this.toHeadYaw = snapshot.headYaw();
             this.fromPitch = this.toPitch = snapshot.pitch();
-            this.snapshotNanos = System.nanoTime();
+            long now = System.nanoTime();
+            this.snapshotNanos = now;
             this.applyFields(snapshot);
-            this.applyVehicle(snapshot.vehicle(), false);
+            this.applyVehicle(snapshot.vehicle(), false, now);
             this.generation = generation;
         }
 
         void apply(PlayerSnapshot snapshot, int generation) {
             long now = System.nanoTime();
-            this.fromPosition = this.renderPosition(now);
+            float progress = this.progress(now);
+            this.fromPosition = this.renderPosition(progress);
             this.toPosition = new Vec3(snapshot.x(), snapshot.y(), snapshot.z());
-            this.fromBodyYaw = this.renderBodyYaw(now);
+            this.fromBodyYaw = this.renderBodyYaw(progress);
             this.toBodyYaw = snapshot.bodyYaw();
-            this.fromHeadYaw = this.renderHeadYaw(now);
+            this.fromHeadYaw = this.renderHeadYaw(progress);
             this.toHeadYaw = snapshot.headYaw();
-            this.fromPitch = this.renderPitch(now);
+            this.fromPitch = this.renderPitch(progress);
             this.toPitch = snapshot.pitch();
             this.applyFields(snapshot);
-            this.applyVehicle(snapshot.vehicle(), true);
+            this.applyVehicle(snapshot.vehicle(), true, now);
             this.snapshotNanos = now;
             this.generation = generation;
         }
@@ -124,7 +133,7 @@ final class FarPlayerTracker {
             this.head = snapshot.head();
         }
 
-        private void applyVehicle(VehicleSnapshot vehicle, boolean interpolate) {
+        private void applyVehicle(VehicleSnapshot vehicle, boolean interpolate, long now) {
             if (vehicle == null) {
                 this.vehicleUuid = null;
                 this.vehicleTypeId = null;
@@ -132,14 +141,14 @@ final class FarPlayerTracker {
                 this.toVehiclePosition = null;
                 return;
             }
-            long now = System.nanoTime();
             Vec3 position = new Vec3(vehicle.x(), vehicle.y(), vehicle.z());
             boolean same = vehicle.uuid().equals(this.vehicleUuid)
                     && vehicle.entityTypeId().equals(this.vehicleTypeId);
             if (interpolate && same && this.toVehiclePosition != null) {
-                this.fromVehiclePosition = this.renderVehiclePosition(now);
-                this.fromVehicleYaw = this.renderVehicleYaw(now);
-                this.fromVehiclePitch = this.renderVehiclePitch(now);
+                float progress = this.progress(now);
+                this.fromVehiclePosition = this.renderVehiclePosition(progress);
+                this.fromVehicleYaw = this.renderVehicleYaw(progress);
+                this.fromVehiclePitch = this.renderVehiclePitch(progress);
             } else {
                 this.fromVehiclePosition = position;
                 this.fromVehicleYaw = vehicle.yaw();
@@ -170,40 +179,59 @@ final class FarPlayerTracker {
         int vehicleEntityId() { return this.vehicleEntityId; }
         String vehicleTypeId() { return this.vehicleTypeId; }
 
-        Vec3 renderPosition(long now) {
-            return this.fromPosition.lerp(this.toPosition, this.progress(now));
+        Vec3 renderPosition(float progress) {
+            return this.fromPosition.lerp(this.toPosition, progress);
         }
 
-        float renderBodyYaw(long now) {
-            return Mth.rotLerp(this.progress(now), this.fromBodyYaw, this.toBodyYaw);
+        double renderX(float progress) { return Mth.lerp(progress, this.fromPosition.x, this.toPosition.x); }
+        double renderY(float progress) { return Mth.lerp(progress, this.fromPosition.y, this.toPosition.y); }
+        double renderZ(float progress) { return Mth.lerp(progress, this.fromPosition.z, this.toPosition.z); }
+
+        float renderBodyYaw(float progress) {
+            return Mth.rotLerp(progress, this.fromBodyYaw, this.toBodyYaw);
         }
 
-        float renderHeadYaw(long now) {
-            return Mth.rotLerp(this.progress(now), this.fromHeadYaw, this.toHeadYaw);
+        float renderHeadYaw(float progress) {
+            return Mth.rotLerp(progress, this.fromHeadYaw, this.toHeadYaw);
         }
 
-        float renderPitch(long now) {
-            return Mth.lerp(this.progress(now), this.fromPitch, this.toPitch);
+        float renderPitch(float progress) {
+            return Mth.lerp(progress, this.fromPitch, this.toPitch);
         }
 
-        Vec3 renderVehiclePosition(long now) {
+        Vec3 renderVehiclePosition(float progress) {
             if (this.toVehiclePosition == null) {
                 return Vec3.ZERO;
             }
             return this.fromVehiclePosition == null
                     ? this.toVehiclePosition
-                    : this.fromVehiclePosition.lerp(this.toVehiclePosition, this.progress(now));
+                    : this.fromVehiclePosition.lerp(this.toVehiclePosition, progress);
         }
 
-        float renderVehicleYaw(long now) {
-            return Mth.rotLerp(this.progress(now), this.fromVehicleYaw, this.toVehicleYaw);
+        double renderVehicleX(float progress) {
+            return this.fromVehiclePosition == null || this.toVehiclePosition == null
+                    ? 0.0D : Mth.lerp(progress, this.fromVehiclePosition.x, this.toVehiclePosition.x);
         }
 
-        float renderVehiclePitch(long now) {
-            return Mth.lerp(this.progress(now), this.fromVehiclePitch, this.toVehiclePitch);
+        double renderVehicleY(float progress) {
+            return this.fromVehiclePosition == null || this.toVehiclePosition == null
+                    ? 0.0D : Mth.lerp(progress, this.fromVehiclePosition.y, this.toVehiclePosition.y);
         }
 
-        private float progress(long now) {
+        double renderVehicleZ(float progress) {
+            return this.fromVehiclePosition == null || this.toVehiclePosition == null
+                    ? 0.0D : Mth.lerp(progress, this.fromVehiclePosition.z, this.toVehiclePosition.z);
+        }
+
+        float renderVehicleYaw(float progress) {
+            return Mth.rotLerp(progress, this.fromVehicleYaw, this.toVehicleYaw);
+        }
+
+        float renderVehiclePitch(float progress) {
+            return Mth.lerp(progress, this.fromVehiclePitch, this.toVehiclePitch);
+        }
+
+        float progress(long now) {
             return Mth.clamp((float) (now - this.snapshotNanos) / INTERPOLATION_NANOS, 0.0F, 1.0F);
         }
     }

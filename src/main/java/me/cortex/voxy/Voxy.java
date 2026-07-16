@@ -49,12 +49,8 @@ public class Voxy {
         if (FMLLoader.getDist() == Dist.CLIENT) {
             registrar.playToClient(FarEntityProtocol.PlayersPayload.TYPE, FarEntityProtocol.PlayersPayload.STREAM_CODEC,
                     (payload, context) -> context.enqueueWork(() -> FarEntityClient.handle(payload.batch())));
-            registrar.playToClient(FarEntityProtocol.ContraptionsPayload.TYPE, FarEntityProtocol.ContraptionsPayload.STREAM_CODEC,
-                    (payload, context) -> context.enqueueWork(() -> FarEntityClient.handle(payload.batch())));
         } else {
             registrar.playToClient(FarEntityProtocol.PlayersPayload.TYPE, FarEntityProtocol.PlayersPayload.STREAM_CODEC,
-                    (payload, context) -> { });
-            registrar.playToClient(FarEntityProtocol.ContraptionsPayload.TYPE, FarEntityProtocol.ContraptionsPayload.STREAM_CODEC,
                     (payload, context) -> { });
         }
     }

@@ -87,7 +87,6 @@ public class VoxyCommands {
         }
 
         VoxyCommon.shutdownInstance();
-        System.gc();
         VoxyCommon.createInstance();
 
         var r = Minecraft.getInstance().levelRenderer;

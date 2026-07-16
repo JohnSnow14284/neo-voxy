@@ -15,8 +15,6 @@
     "minecraft.MixinMinecraft",
     "minecraft.MixinRenderSystem",
     "minecraft.MixinWindow",
-    "create.ControlledContraptionEntityAccessor",
-    "create.VisualizationManagerMixin",
     "sodium.AccessorChunkTracker",
     "sodium.AccessorSodiumWorldRenderer",
     "sodium.MixinChunkJobQueue",

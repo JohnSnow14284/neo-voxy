@@ -54,6 +54,7 @@ public class BudgetBufferRenderer {
 
     private static GlBuffer immediateBuffer;
     private static int quadCount;
+    private static final ThreadLocal<float[]> MATRIX_UPLOAD = ThreadLocal.withInitial(() -> new float[16]);
 
     // TODO: MC 1.21.1 - GpuTexture type not accessible, Gl Texture.glId() not accessible
     // Need mixin accessor or alternative API for texture ID
@@ -103,7 +104,7 @@ public class BudgetBufferRenderer {
     }
 
     public static void render(Matrix4f matrix) {
-        glUniformMatrix4fv(1, false, matrix.get(new float[16]));
+        glUniformMatrix4fv(1, false, matrix.get(MATRIX_UPLOAD.get()));
         glDrawElements(GL_TRIANGLES, quadCount * 2 * 3, GL_UNSIGNED_SHORT, 0);
     }
 }
