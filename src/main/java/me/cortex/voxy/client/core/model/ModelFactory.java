@@ -256,12 +256,40 @@ public class ModelFactory {
 
         boolean hasDarkenedTextures = (flags&2)!=0;
         boolean isShaded = (flags&1)!=0;
-        RenderType layer;
+        RenderType layer = null;
         if ((flags & 4) != 0) {
-            layer = RenderType.translucent();
-        } else if ((flags & 8) != 0) {
+            // Newer Minecraft render layers are less reliable as a semantic description of
+            // the baked result. Classify the actual pixels so opaque models do not pay the
+            // translucent sorting cost merely because their source layer allowed blending.
+            boolean anyTranslucent = false;
+            for (var face : textureData) {
+                if (TextureUtils.hasTranslucentPixel(face)) {
+                    anyTranslucent = true;
+                    break;
+                }
+            }
+            if (anyTranslucent) {
+                layer = RenderType.translucent();
+            } else {
+                boolean solidWhereDrawn = true;
+                for (var face : textureData) {
+                    if (!TextureUtils.isSolidWhereDrawn(face)) {
+                        solidWhereDrawn = false;
+                        break;
+                    }
+                }
+                layer = solidWhereDrawn ? RenderType.solid() : RenderType.cutout();
+            }
+        }
+        if (layer == null && (flags & 8) != 0) {
             layer = RenderType.cutout();
-        } else {
+        }
+        if (isLeafBlockState(bake.state)) {
+            layer = VoxyConfig.CONFIG.getLeafLodMode() == VoxyConfig.LeafLodMode.FAST
+                    ? RenderType.solid()
+                    : RenderType.cutout();
+        }
+        if (layer == null) {
             layer = RenderType.solid();
         }
         boolean centeredGroundCross = (flags & SoftwareModelTextureBakery.FLAG_CENTERED_GROUND_CROSS) != 0;

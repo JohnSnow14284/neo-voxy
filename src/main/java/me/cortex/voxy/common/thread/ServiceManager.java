@@ -73,22 +73,20 @@ public class ServiceManager {
             if (services.length == 0) return 1;
             if (this.totalJobs.get()==0) return 1;
             long totalWeight = 0;
-            int shiftFactor = (ctx.shiftFactor++)&Integer.MAX_VALUE;//We cycle and shift the starting service when choosing to prevent bias
-            int c = shiftFactor;
+            int shiftFactor = ((ctx.shiftFactor++)&Integer.MAX_VALUE)%services.length;//We cycle and shift the starting service when choosing to prevent bias
             Service selectedService = null;
             for (int i = 0; i < services.length; i++) {
-                var service = services[i];
+                var service = services[(i+shiftFactor)%services.length];
                 if (!service.isLive()) {
                     Thread.yield();
                     continue outer;//We need to refetch the array and start over
                 }
-                boolean sc = c--<=0;
                 if (service.limiter!=null && !service.limiter.getAsBoolean()) {
                     skipMsk |= 1L<<i;
                     continue;
                 }
                 long jc = service.numJobs();
-                if (sc&&jc!=0&&selectedService==null) selectedService=service;
+                if (jc!=0&&selectedService==null) selectedService=service;
                 totalWeight += jc * service.weight;
             }
             if (totalWeight == 0) return skipMsk!=0?3:2;
@@ -96,7 +94,8 @@ public class ServiceManager {
             long sample = ctx.rand(totalWeight);//Random number
 
             for (int i = 0; i < services.length; i++) {
-                var service = services[(i+shiftFactor)%services.length];
+                int idx = (i+shiftFactor)%services.length;
+                var service = services[idx];
                 if (service.limiter!=null && (((skipMsk&(1L<<i))!=0)|| !service.limiter.getAsBoolean())) {
                     skipMsk |= 1L<<i;
                     continue;

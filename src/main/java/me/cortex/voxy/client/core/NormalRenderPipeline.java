@@ -100,17 +100,21 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
         float fogStart = vrs != null ? vrs.getCapturedFogStart() : RenderSystem.getShaderFogStart();
         float fogEnd = vrs != null ? vrs.getCapturedFogEnd()   : RenderSystem.getShaderFogEnd();
         float[] fogColor = vrs != null ? vrs.getCapturedFogColor() : RenderSystem.getShaderFogColor();
+        boolean requiredFog = vrs != null && vrs.isCapturedFogRequired();
 
-        boolean useFog = VoxyConfig.CONFIG.useEnvironmentalFog
-                && VoxyConfig.CONFIG.fogIntensity > 0.0f
-                && Math.abs(fogEnd - fogStart) > 1.0f;
+        boolean useOptionalFog = VoxyConfig.CONFIG.useEnvironmentalFog
+                && VoxyConfig.CONFIG.fogIntensity > 0.0f;
+        float fogRange = Math.abs(fogEnd - fogStart);
+        boolean useFog = requiredFog
+                ? fogRange > 1.0e-4f
+                : useOptionalFog && fogRange > 1.0f;
 
         if (useFog) {
             glUniform2f(4, fogStart, fogEnd);
             glUniform4f(5, fogColor[0], fogColor[1], fogColor[2], 1.0f);
             glUniform1i(6, RenderSystem.getShaderFogShape().getIndex());
-            glUniform1f(7, Math.clamp(VoxyConfig.CONFIG.fogIntensity, 0.0f, 1.0f));
-            glUniform1f(8, Math.clamp(VoxyConfig.CONFIG.fogDensity, 0.0f, 1.0f));
+            glUniform1f(7, requiredFog ? 1.0f : Math.clamp(VoxyConfig.CONFIG.fogIntensity, 0.0f, 1.0f));
+            glUniform1f(8, requiredFog ? 0.0f : Math.clamp(VoxyConfig.CONFIG.fogDensity, 0.0f, 1.0f));
         } else {
             glUniform2f(4, 0, 0);
             glUniform4f(5, 0, 0, 0, 0);

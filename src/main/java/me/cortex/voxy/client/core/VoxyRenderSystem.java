@@ -84,20 +84,23 @@ public class VoxyRenderSystem {
     // Fog parameters captured before modification by MixinFogRenderer, for Voxy's own fog pass
     private float capturedFogStart;
     private float capturedFogEnd;
+    private boolean capturedFogRequired;
     private final float[] capturedFogColor = new float[4];
     private final int[] savedBufferBindings = new int[10];
     private final int[] viewportDimensions = new int[4];
     private final Matrix4f projectionScratch = new Matrix4f();
     private final Matrix4f modifiedProjectionScratch = new Matrix4f();
 
-    public void setCapturedFog(float fogStart, float fogEnd, float[] fogColor) {
+    public void setCapturedFog(float fogStart, float fogEnd, float[] fogColor, boolean required) {
         this.capturedFogStart = fogStart;
         this.capturedFogEnd = fogEnd;
+        this.capturedFogRequired = required;
         System.arraycopy(fogColor, 0, this.capturedFogColor, 0, 4);
     }
 
     public float getCapturedFogStart() { return this.capturedFogStart; }
     public float getCapturedFogEnd()   { return this.capturedFogEnd; }
+    public boolean isCapturedFogRequired() { return this.capturedFogRequired; }
     public float[] getCapturedFogColor() { return this.capturedFogColor; }
 
     private static AbstractSectionRenderer.Factory<?,? extends IGeometryData> getRenderBackendFactory() {

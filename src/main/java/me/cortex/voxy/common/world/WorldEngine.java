@@ -11,7 +11,7 @@ import java.lang.invoke.VarHandle;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class WorldEngine {
+public final class WorldEngine {
     public static final int MAX_LOD_LAYER = 4;
 
     public static final int UPDATE_TYPE_BLOCK_BIT = 1;

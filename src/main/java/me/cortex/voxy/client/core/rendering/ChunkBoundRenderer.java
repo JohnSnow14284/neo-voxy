@@ -12,8 +12,13 @@ import me.cortex.voxy.client.core.gl.shader.ShaderLoader;
 import me.cortex.voxy.client.core.gl.shader.ShaderType;
 import me.cortex.voxy.client.core.rendering.util.SharedIndexBuffer;
 import me.cortex.voxy.client.core.rendering.util.UploadStream;
+import me.cortex.voxy.client.mixin.sodium.AccessorSodiumWorldRenderer;
 import me.cortex.voxy.common.Logger;
+import me.cortex.voxy.commonImpl.VoxyCommon;
+import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
+import net.caffeinemc.mods.sodium.client.render.chunk.LocalSectionIndex;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.SectionPos;
 import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryUtil;
 
@@ -32,9 +37,15 @@ import static org.lwjgl.opengl.GL42.glDrawElementsInstancedBaseInstance;
 public class ChunkBoundRenderer {
     private static final int INIT_MAX_CHUNK_COUNT = 1<<12;
     private GlBuffer chunkPosBuffer = new GlBuffer(INIT_MAX_CHUNK_COUNT*8);//Stored as ivec2
+    private GlBuffer visiblePosBuffer = new GlBuffer(INIT_MAX_CHUNK_COUNT*8L);
     private final GlBuffer uniformBuffer = new GlBuffer(128);
     private final Long2IntOpenHashMap chunk2idx = new Long2IntOpenHashMap(INIT_MAX_CHUNK_COUNT);
     private long[] idx2chunk = new long[INIT_MAX_CHUNK_COUNT];
+    private int[] visiblePositions = new int[INIT_MAX_CHUNK_COUNT*2];
+    private int visibleSectionCount;
+    private Object lastVisibleRenderLists;
+    private GlBuffer boundPositionBuffer;
+    private boolean visibleListFailureLogged;
     private final Shader rasterShader;
     private final RenderProperties properties;
     // Render-thread scratch matrix. Reusing it avoids one Matrix4f allocation for every
@@ -66,6 +77,7 @@ public class ChunkBoundRenderer {
                 .compile()
                 .ubo(0, this.uniformBuffer)
                 .ssbo(1, this.chunkPosBuffer);
+        this.boundPositionBuffer = this.chunkPosBuffer;
     }
 
     public void addSection(long pos) {
@@ -91,7 +103,13 @@ public class ChunkBoundRenderer {
             }
         }
 
-        if (this.chunk2idx.isEmpty() && this.addQueue.isEmpty()) return;
+        boolean useVisibleSections = this.refreshVisibleSections();
+        int count = useVisibleSections ? this.visibleSectionCount : this.chunk2idx.size();
+        if (count == 0) {
+            viewport.depthBoundingBuffer.clear(this.properties.inverseClearDepth());
+            this.flushAddQueue();
+            return;
+        }
 
         viewport.depthBoundingBuffer.clear(this.properties.inverseClearDepth());
 
@@ -104,9 +122,9 @@ public class ChunkBoundRenderer {
 
             // Camera block position. Write directly into the mapped UBO instead of creating
             // short-lived Vector3i/Vector3f objects on every frame.
-            int bx = (int) viewport.cameraX;
-            int by = (int) viewport.cameraY;
-            int bz = (int) viewport.cameraZ;
+            int bx = (int)Math.floor(viewport.cameraX);
+            int by = (int)Math.floor(viewport.cameraY);
+            int bz = (int)Math.floor(viewport.cameraZ);
             MemoryUtil.memPutInt(ptr, bx); ptr += 4;
             MemoryUtil.memPutInt(ptr, by); ptr += 4;
             MemoryUtil.memPutInt(ptr, bz); ptr += 4;
@@ -142,11 +160,15 @@ public class ChunkBoundRenderer {
         glBindVertexArray(GlVertexArray.STATIC_VAO);
         viewport.depthBoundingBuffer.bind();
         this.rasterShader.bind();
+        GlBuffer positionBuffer = useVisibleSections ? this.visiblePosBuffer : this.chunkPosBuffer;
+        if (this.boundPositionBuffer != positionBuffer) {
+            ((AutoBindingShader)this.rasterShader).ssbo(1, positionBuffer);
+            this.boundPositionBuffer = positionBuffer;
+        }
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, SharedIndexBuffer.INSTANCE_BB_BYTE.id());
         if (this.pipeline != null) this.pipeline.bindUniforms();//shader TAA
 
         //Batch the draws into groups of size 32
-        int count = this.chunk2idx.size();
         if (count >= 32) {
             glDrawElementsInstanced(GL_TRIANGLES, 6 * 2 * 3 * 32, GL_UNSIGNED_BYTE, 0, count/32);
         }
@@ -165,6 +187,99 @@ public class ChunkBoundRenderer {
         }
 
 
+        this.flushAddQueue();
+    }
+
+    private boolean refreshVisibleSections() {
+        if (VoxyCommon.IS_MINE_IN_ABYSS) {
+            return false;
+        }
+        try {
+            var sodium = SodiumWorldRenderer.instanceNullable();
+            if (sodium == null) {
+                return false;
+            }
+            var manager = ((AccessorSodiumWorldRenderer)(Object)sodium).getRenderSectionManager();
+            if (manager == null) {
+                return false;
+            }
+            var renderLists = manager.getRenderLists();
+            // Sodium replaces SortedRenderLists whenever its finalized visibility graph
+            // changes. Object identity is therefore a complete, O(1) cache key and avoids
+            // walking every visible region just to calculate getVisibleChunkCount().
+            if (renderLists == this.lastVisibleRenderLists) {
+                return this.visibleSectionCount != 0 || this.chunk2idx.isEmpty();
+            }
+            this.lastVisibleRenderLists = renderLists;
+            this.visibleSectionCount = 0;
+
+            var lists = renderLists.iterator();
+            while (lists.hasNext()) {
+                var list = lists.next();
+                var sections = list.sectionsWithGeometryIterator(false);
+                if (sections == null) {
+                    continue;
+                }
+                var region = list.getRegion();
+                int baseX = region.getChunkX();
+                int baseY = region.getChunkY();
+                int baseZ = region.getChunkZ();
+                while (sections.hasNext()) {
+                    int localIndex = sections.nextByteAsInt();
+                    this.ensureVisibleCapacity(this.visibleSectionCount + 1);
+                    long pos = SectionPos.asLong(
+                            baseX + LocalSectionIndex.unpackX(localIndex),
+                            baseY + LocalSectionIndex.unpackY(localIndex),
+                            baseZ + LocalSectionIndex.unpackZ(localIndex));
+                    int outputIndex = this.visibleSectionCount++ << 1;
+                    this.visiblePositions[outputIndex] = (int)pos;
+                    this.visiblePositions[outputIndex + 1] = (int)(pos >>> 32);
+                }
+            }
+
+            long requiredBytes = this.visibleSectionCount * 8L;
+            if (requiredBytes > this.visiblePosBuffer.size()) {
+                UploadStream.INSTANCE.commit();
+                this.visiblePosBuffer.free();
+                long capacity = Math.max(requiredBytes, (long)(requiredBytes * 1.25));
+                this.visiblePosBuffer = new GlBuffer(capacity);
+                if (this.boundPositionBuffer != this.chunkPosBuffer) {
+                    this.boundPositionBuffer = null;
+                }
+            }
+            if (requiredBytes != 0) {
+                long ptr = UploadStream.INSTANCE.upload(this.visiblePosBuffer, 0, requiredBytes);
+                int intCount = this.visibleSectionCount << 1;
+                for (int index = 0; index < intCount; index++) {
+                    MemoryUtil.memPutInt(ptr + index * 4L, this.visiblePositions[index]);
+                }
+                UploadStream.INSTANCE.commit();
+            }
+            // An empty finalized list with built sections still tracked is normally a
+            // graph-transition frame. Keep the stable built-section mask for that frame.
+            return this.visibleSectionCount != 0 || this.chunk2idx.isEmpty();
+        } catch (Throwable failure) {
+            if (!this.visibleListFailureLogged) {
+                this.visibleListFailureLogged = true;
+                Logger.warn("Unable to use Sodium visible-section bounds; using built-section bounds instead: " + failure);
+            }
+            this.lastVisibleRenderLists = null;
+            return false;
+        }
+    }
+
+    private void ensureVisibleCapacity(int sectionCount) {
+        int requiredInts = sectionCount << 1;
+        if (requiredInts <= this.visiblePositions.length) {
+            return;
+        }
+        int newLength = Math.max(requiredInts, this.visiblePositions.length + (this.visiblePositions.length >> 1));
+        int[] replacement = new int[newLength];
+        System.arraycopy(this.visiblePositions, 0, replacement, 0, this.visibleSectionCount << 1);
+        this.visiblePositions = replacement;
+    }
+
+    private void flushAddQueue() {
         if (!this.addQueue.isEmpty()) {
             this.addQueue.forEach(this::_addPos);//TODO: REPLACE WITH SCATTER COMPUTE
             this.addQueue.clear();
@@ -239,11 +354,14 @@ public class ChunkBoundRenderer {
 
     public void reset() {
         this.chunk2idx.clear();
+        this.visibleSectionCount = 0;
+        this.lastVisibleRenderLists = null;
     }
 
     public void free() {
         this.rasterShader.free();
         this.uniformBuffer.free();
         this.chunkPosBuffer.free();
+        this.visiblePosBuffer.free();
     }
 }

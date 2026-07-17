@@ -34,11 +34,9 @@ public class VoxelIngestService {
 
     private void processJob() {
         var task = this.ingestQueue.pop();
-        task.world.markActive();
-
-        var section = task.section;
-        DomumOrnamentumCompat.beginSection(task.world.getMapper(), task.chunk, task.section, task.cy);
         try {
+            var section = task.section;
+            DomumOrnamentumCompat.beginSection(task.world.getMapper(), task.chunk, task.section, task.cy);
             var vs = SECTION_CACHE.get().setPosition(task.cx, task.cy, task.cz);
 
             if (section.hasOnlyAir() && task.blockLight==null && task.skyLight==null) {//If the chunk section has lighting data, propagate it
@@ -55,7 +53,11 @@ public class VoxelIngestService {
                 WorldUpdater.insertUpdate(task.world, csec);
             }
         } finally {
-            DomumOrnamentumCompat.endSection();
+            try {
+                DomumOrnamentumCompat.endSection();
+            } finally {
+                task.world.releaseRef();
+            }
         }
     }
 
@@ -126,7 +128,7 @@ public class VoxelIngestService {
             for (var section : chunk.getSections()) {
                 i++;
                 if (section == null || !shouldIngestSection(section, chunk.getPos().x, i, chunk.getPos().z)) continue;
-                engine.markActive();
+                engine.acquireRef();
                 this.ingestQueue.add(new IngestSection(chunk.getPos().x, i, chunk.getPos().z, engine, chunk, section, null, null));
                 try {
                     this.service.execute();
@@ -166,7 +168,7 @@ public class VoxelIngestService {
             //if (blNone && slNone) {
             //    continue;
             //}
-            engine.markActive();
+            engine.acquireRef();
             this.ingestQueue.add(new IngestSection(chunk.getPos().x, i, chunk.getPos().z, engine, chunk, section, bl, sl));//TODO: fixme, this is technically not safe todo on the chunk load ingest, we need to copy the section data so it cant be modified while being read
             try {
                 this.service.execute();
@@ -184,6 +186,9 @@ public class VoxelIngestService {
 
     public void shutdown() {
         this.service.shutdown();
+        while (!this.ingestQueue.isEmpty()) {
+            this.ingestQueue.pop().world.releaseRef();
+        }
     }
 
     //Utility method to ingest a chunk into the given WorldIdentifier or world
@@ -203,6 +208,7 @@ public class VoxelIngestService {
     }
 
     private boolean rawIngest0(WorldEngine engine, LevelChunkSection section, int x, int y, int z, DataLayer bl, DataLayer sl) {
+        engine.acquireRef();
         this.ingestQueue.add(new IngestSection(x, y, z, engine, null, section, bl, sl));
         try {
             this.service.execute();

@@ -12,7 +12,7 @@ import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.StampedLock;
 
-public class ActiveSectionTracker {
+public final class ActiveSectionTracker {
 
     public interface SectionLoader {
         int load(WorldSection section);
