@@ -5,7 +5,7 @@ import me.cortex.voxy.common.config.compressors.ZSTDCompressor;
 import me.cortex.voxy.common.config.section.SectionSerializationStorage;
 import me.cortex.voxy.common.config.section.SectionStorageConfig;
 import me.cortex.voxy.common.config.storage.other.CompressionStorageAdaptor;
-import me.cortex.voxy.common.config.storage.rocksdb.RocksDBStorageBackend;
+import me.cortex.voxy.common.config.storage.lmdb.LMDBStorageBackend;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -54,7 +54,7 @@ public class StorageConfigUtil {
 
     public static SectionSerializationStorage.Config createDefaultSerializer() {
         //Create the default config
-        var baseDB = new RocksDBStorageBackend.Config();
+        var baseDB = new LMDBStorageBackend.Config();
 
         var compressor = new ZSTDCompressor.Config();
         compressor.compressionLevel = 1;

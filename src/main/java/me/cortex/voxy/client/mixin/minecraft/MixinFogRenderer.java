@@ -47,11 +47,25 @@ public class MixinFogRenderer {
                 ? Math.max(RenderSystem.getShaderFogStart() + 1.01f,
                         VoxyConfig.CONFIG.skyFogDistance * 16.0f)
                 : originalEnd;
+        float[] capturedColor = RenderSystem.getShaderFogColor();
+        if (camera.getFluidInCamera() == FogType.WATER) {
+            // Keep the vanilla near terrain untouched, but let the normal Voxy composite
+            // retain a little more distant detail and reduce the unnaturally saturated blue.
+            // Shader packs return above and therefore receive none of these adjustments.
+            capturedEnd = Math.max(capturedEnd, originalEnd * 1.18f);
+            float average = (capturedColor[0] + capturedColor[1] + capturedColor[2]) / 3.0f;
+            capturedColor = new float[]{
+                    capturedColor[0] * 0.86f + average * 0.14f,
+                    capturedColor[1] * 0.86f + average * 0.14f,
+                    capturedColor[2] * 0.86f + average * 0.14f,
+                    capturedColor.length > 3 ? capturedColor[3] : 1.0f
+            };
+        }
         // Disabling Voxy's optional distance fog must not disable fog that represents the
         // camera's physical medium or a vanilla near-range effect. The LOD colour target is
         // composited after vanilla terrain, so it has to reproduce those mandatory fog values.
         renderer.setCapturedFog(RenderSystem.getShaderFogStart(), capturedEnd,
-                RenderSystem.getShaderFogColor(), !normalTerrainFog);
+                capturedColor, !normalTerrainFog);
 
         if (normalTerrainFog) {
             RenderSystem.setShaderFogStart(Float.MAX_VALUE);

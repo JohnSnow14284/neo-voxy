@@ -14,6 +14,7 @@ import me.cortex.voxy.commonImpl.WorldIdentifier;
 import me.cortex.voxy.commonImpl.compat.DomumOrnamentumCompat;
 import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.chunk.DataLayer;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
@@ -25,7 +26,9 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 public class VoxelIngestService {
     private static final ThreadLocal<VoxelizedSection> SECTION_CACHE = ThreadLocal.withInitial(VoxelizedSection::createEmpty);
     private final Service service;
-    private record IngestSection(int cx, int cy, int cz, WorldEngine world, LevelChunk chunk, LevelChunkSection section, DataLayer blockLight, DataLayer skyLight){}
+    private record IngestSection(int cx, int cy, int cz, WorldEngine world,
+                                 BlockEntity[] domumBlockEntities, LevelChunkSection section,
+                                 DataLayer blockLight, DataLayer skyLight){}
     private final ConcurrentLinkedDeque<IngestSection> ingestQueue = new ConcurrentLinkedDeque<>();
 
     public VoxelIngestService(ServiceManager pool) {
@@ -36,7 +39,7 @@ public class VoxelIngestService {
         var task = this.ingestQueue.pop();
         try {
             var section = task.section;
-            DomumOrnamentumCompat.beginSection(task.world.getMapper(), task.chunk, task.section, task.cy);
+            DomumOrnamentumCompat.beginSection(task.world.getMapper(), task.domumBlockEntities, task.section, task.cy);
             var vs = SECTION_CACHE.get().setPosition(task.cx, task.cy, task.cz);
 
             if (section.hasOnlyAir() && task.blockLight==null && task.skyLight==null) {//If the chunk section has lighting data, propagate it
@@ -106,6 +109,10 @@ public class VoxelIngestService {
 
         engine.markActive();
 
+        // Capture and bucket once on the caller thread. Each section job now receives only
+        // its own entities instead of repeatedly filtering the whole chunk-column array.
+        var domumBlockEntities = DomumOrnamentumCompat.captureBlockEntitiesBySection(chunk);
+
         var lightingProvider = chunk.getLevel().getLightEngine();
         boolean gotLighting = false;
 
@@ -129,7 +136,8 @@ public class VoxelIngestService {
                 i++;
                 if (section == null || !shouldIngestSection(section, chunk.getPos().x, i, chunk.getPos().z)) continue;
                 engine.acquireRef();
-                this.ingestQueue.add(new IngestSection(chunk.getPos().x, i, chunk.getPos().z, engine, chunk, section, null, null));
+                this.ingestQueue.add(new IngestSection(chunk.getPos().x, i, chunk.getPos().z, engine,
+                        domumBlockEntities.forSection(i), section, null, null));
                 try {
                     this.service.execute();
                 } catch (Exception e) {
@@ -169,7 +177,8 @@ public class VoxelIngestService {
             //    continue;
             //}
             engine.acquireRef();
-            this.ingestQueue.add(new IngestSection(chunk.getPos().x, i, chunk.getPos().z, engine, chunk, section, bl, sl));//TODO: fixme, this is technically not safe todo on the chunk load ingest, we need to copy the section data so it cant be modified while being read
+            this.ingestQueue.add(new IngestSection(chunk.getPos().x, i, chunk.getPos().z, engine,
+                    domumBlockEntities.forSection(i), section, bl, sl));//TODO: fixme, this is technically not safe todo on the chunk load ingest, we need to copy the section data so it cant be modified while being read
             try {
                 this.service.execute();
             } catch (Exception e) {
@@ -207,9 +216,11 @@ public class VoxelIngestService {
         return tryIngestChunk(WorldIdentifier.of(chunk.getLevel()), chunk);
     }
 
-    private boolean rawIngest0(WorldEngine engine, LevelChunkSection section, int x, int y, int z, DataLayer bl, DataLayer sl) {
+    private boolean rawIngest0(WorldEngine engine, LevelChunk chunk, LevelChunkSection section,
+                               int x, int y, int z, DataLayer bl, DataLayer sl) {
         engine.acquireRef();
-        this.ingestQueue.add(new IngestSection(x, y, z, engine, null, section, bl, sl));
+        BlockEntity[] domumBlockEntities = DomumOrnamentumCompat.captureBlockEntities(chunk, section);
+        this.ingestQueue.add(new IngestSection(x, y, z, engine, domumBlockEntities, section, bl, sl));
         try {
             this.service.execute();
             return true;
@@ -220,16 +231,26 @@ public class VoxelIngestService {
     }
 
     public static boolean rawIngest(WorldIdentifier id, LevelChunkSection section, int x, int y, int z, DataLayer bl, DataLayer sl) {
+        return rawIngest(id, null, section, x, y, z, bl, sl);
+    }
+
+    public static boolean rawIngest(WorldIdentifier id, LevelChunk chunk, LevelChunkSection section,
+                                    int x, int y, int z, DataLayer bl, DataLayer sl) {
         if (id == null) return false;
         var engine = id.getOrCreateEngine();
         if (engine == null) return false;
-        return rawIngest(engine, section, x, y, z, bl, sl);
+        return rawIngest(engine, chunk, section, x, y, z, bl, sl);
     }
 
     public static boolean rawIngest(WorldEngine engine, LevelChunkSection section, int x, int y, int z, DataLayer bl, DataLayer sl) {
+        return rawIngest(engine, null, section, x, y, z, bl, sl);
+    }
+
+    public static boolean rawIngest(WorldEngine engine, LevelChunk chunk, LevelChunkSection section,
+                                    int x, int y, int z, DataLayer bl, DataLayer sl) {
         if (!shouldIngestSection(section, x, y, z)) return false;
         if (engine.instanceIn == null) return false;
         if (!engine.instanceIn.isIngestEnabled(null)) return false;//TODO: dont pass in null
-        return engine.instanceIn.getIngestService().rawIngest0(engine, section, x, y, z, bl, sl);
+        return engine.instanceIn.getIngestService().rawIngest0(engine, chunk, section, x, y, z, bl, sl);
     }
 }

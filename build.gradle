@@ -161,6 +161,7 @@ jar {
     // Keep the full dependency bundle as an intermediate artifact. The optimized
     // distribution produced below uses the normal release filename.
     archiveClassifier.set('unoptimized')
+    destinationDirectory.set(layout.buildDirectory.dir('intermediates/jars'))
 
     from("LICENSE.md") {
         rename { "${it}_${licenseArchiveSuffix}"}
@@ -172,8 +173,11 @@ jar {
 abstract class SlimJarTask extends DefaultTask {
     private static final String MODULE_INFO = 'META-INF/versions/9/module-info.class'
     private static final Set<String> ROCKS_NATIVES_TO_KEEP = [
-            'librocksdbjni-win64.dll',
-            'librocksdbjni-linux64.so'
+            'librocksdbjni-win64.dll'
+    ] as Set
+    private static final Set<String> SQLITE_NATIVES_TO_KEEP = [
+            'org/sqlite/native/windows/x86_64/sqlitejdbc.dll',
+            'org/sqlite/native/linux/x86_64/libsqlitejdbc.so'
     ] as Set
 
     @InputFile
@@ -211,12 +215,16 @@ abstract class SlimJarTask extends DefaultTask {
                 boolean forceStored = false
 
                 if (path.startsWith('meta-inf/jarjar/rocksdbjni-') && path.endsWith('.jar')) {
-                    data = rewriteNestedJar(data, true, counters)
+                    data = rewriteNestedJar(data, 'rocksdb', counters)
+                    forceStored = true
+                    counters[2]++
+                } else if (path.startsWith('meta-inf/jarjar/sqlite-jdbc-') && path.endsWith('.jar')) {
+                    data = rewriteNestedJar(data, 'sqlite', counters)
                     forceStored = true
                     counters[2]++
                 } else if ((path.startsWith('meta-inf/jarjar/lwjgl-lmdb-') ||
                         path.startsWith('meta-inf/jarjar/lwjgl-zstd-')) && path.endsWith('.jar')) {
-                    data = rewriteNestedJar(data, false, counters)
+                    data = rewriteNestedJar(data, 'module', counters)
                     forceStored = true
                     counters[2]++
                 }
@@ -239,12 +247,12 @@ abstract class SlimJarTask extends DefaultTask {
         double beforeMiB = source.length() / (1024.0d * 1024.0d)
         double afterMiB = target.length() / (1024.0d * 1024.0d)
         logger.lifecycle(String.format(Locale.ROOT,
-                'Slim JAR: %.1f MiB -> %.1f MiB (%d nested jars, %d RocksDB natives removed, %d module descriptors removed)',
+                'Slim JAR: %.1f MiB -> %.1f MiB (%d nested jars, %d unused natives removed, %d module descriptors removed)',
                 beforeMiB, afterMiB, counters[2], counters[0], counters[1]))
         logger.lifecycle("Slim JAR written to: ${target}")
     }
 
-    private static byte[] rewriteNestedJar(byte[] sourceBytes, boolean rocksDb, int[] counters) {
+    private static byte[] rewriteNestedJar(byte[] sourceBytes, String mode, int[] counters) {
         ByteArrayOutputStream result = new ByteArrayOutputStream(sourceBytes.length)
         ZipInputStream input = new ZipInputStream(new ByteArrayInputStream(sourceBytes))
         ZipOutputStream output = new ZipOutputStream(result)
@@ -254,9 +262,10 @@ abstract class SlimJarTask extends DefaultTask {
             while ((sourceEntry = input.nextEntry) != null) {
                 byte[] data = input.readAllBytes()
                 String fileName = sourceEntry.name.substring(sourceEntry.name.lastIndexOf('/') + 1)
+                String normalizedPath = sourceEntry.name.replace('\\', '/').toLowerCase(Locale.ROOT)
 
                 boolean drop
-                if (rocksDb) {
+                if (mode == 'rocksdb') {
                     boolean nativeLibrary = fileName.startsWith('librocksdbjni-') &&
                             (fileName.endsWith('.so') || fileName.endsWith('.dll') ||
                                     fileName.endsWith('.jnilib') || fileName.endsWith('.dylib'))
@@ -264,6 +273,11 @@ abstract class SlimJarTask extends DefaultTask {
                     if (drop) {
                         counters[0]++
                     }
+                } else if (mode == 'sqlite') {
+                    boolean nativeLibrary = normalizedPath.startsWith('org/sqlite/native/') &&
+                            !sourceEntry.directory
+                    drop = nativeLibrary && !SQLITE_NATIVES_TO_KEEP.contains(normalizedPath)
+                    if (drop) counters[0]++
                 } else {
                     drop = sourceEntry.name == MODULE_INFO
                     if (drop) {
@@ -315,7 +329,7 @@ abstract class SlimJarTask extends DefaultTask {
 
 def productionJar = tasks.named('jar', Jar)
 def slimJarTask = tasks.register('slimJar', SlimJarTask) {
-    description = 'Creates a compact production JAR with only Windows/Linux x64 RocksDB natives'
+    description = 'Creates a compact production JAR with only supported Windows/Linux x64 natives'
     group = 'build'
     dependsOn productionJar
     sourceJar.set(productionJar.flatMap { it.archiveFile })
@@ -428,28 +442,24 @@ dependencies {
     additionalRuntimeClasspath "org.lwjgl:lwjgl-lmdb:$lwjglVersion:natives-linux"
     additionalRuntimeClasspath "org.lwjgl:lwjgl-zstd:$lwjglVersion:natives-linux"
 
-    // === JarJar Bundled Dependencies (full feature parity) ===
-
-    // RocksDB - Default storage backend
-    jarJar(implementation('org.rocksdb:rocksdbjni')) {
-        version {
-            strictly '[10.0.0, 11.0.0)'
-            prefer '10.2.1'
-        }
+    // Keep the Windows x64 RocksDB compatibility backend for existing caches. New
+    // installations use the smaller cross-platform LMDB backend by default.
+    jarJar(implementation('org.rocksdb:rocksdbjni:10.2.1')) {
+        version { strictly '[10.0.0, 11.0.0)'; prefer '10.2.1' }
     }
 
     // LZ4 - PROVIDED by Minecraft runtime (do NOT bundle - causes module conflict)
     implementation 'org.lz4:lz4-java:1.8.0'
 
-    // Redis storage backend + connection pooling
+    // Redis remains available without pulling unrelated optional storage engines.
     jarJar(implementation('redis.clients:jedis:5.1.0')) {
-        version {
-            strictly '[5.0.0, 6.0.0)'
-            prefer '5.1.0'
-        }
+        version { strictly '[5.0.0, 6.0.0)'; prefer '5.1.0' }
     }
-    // commons-pool2 is a transitive dependency of jedis
-    implementation 'org.apache.commons:commons-pool2:2.12.0'
+    jarJar(implementation('org.apache.commons:commons-pool2:2.12.0')) {
+        version { strictly '[2.12.0, 3.0.0)'; prefer '2.12.0' }
+    }
+    additionalRuntimeClasspath 'redis.clients:jedis:5.1.0'
+    additionalRuntimeClasspath 'org.apache.commons:commons-pool2:2.12.0'
 
     // Distant Horizons import support
     jarJar(implementation('org.tukaani:xz:1.10')) {
@@ -458,10 +468,9 @@ dependencies {
             prefer '1.10'
         }
     }
+    // The release task retains only Windows/Linux x64 SQLite natives.
     jarJar(implementation('org.xerial:sqlite-jdbc:3.49.1.0')) {
-        version {
-            strictly '[3.40.0.0, 4.0.0.0)'
-            prefer '3.49.1.0'
-        }
+        version { strictly '[3.40.0.0, 4.0.0.0)'; prefer '3.49.1.0' }
     }
+    additionalRuntimeClasspath 'org.xerial:sqlite-jdbc:3.49.1.0'
 }

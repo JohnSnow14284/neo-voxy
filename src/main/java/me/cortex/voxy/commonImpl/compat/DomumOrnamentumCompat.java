@@ -25,6 +25,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.Optional;
@@ -33,6 +34,7 @@ import java.util.function.Predicate;
 
 public final class DomumOrnamentumCompat {
     public static final String VARIANT_TYPE = "domum_ornamentum";
+    private static final BlockEntity[] NO_BLOCK_ENTITIES = new BlockEntity[0];
 
     private static final boolean LOADED = ModList.get().isLoaded(VARIANT_TYPE);
     private static final String PACKAGE_PREFIX = "com.ldtteam.domumornamentum";
@@ -48,7 +50,12 @@ public final class DomumOrnamentumCompat {
     private static final ClassValue<Boolean> DOMUM_BLOCK_ENTITIES = new ClassValue<>() {
         @Override
         protected Boolean computeValue(Class<?> type) {
-            return type.getName().startsWith(PACKAGE_PREFIX);
+            for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+                if (current.getName().startsWith(PACKAGE_PREFIX)) {
+                    return true;
+                }
+            }
+            return false;
         }
     };
 
@@ -85,6 +92,28 @@ public final class DomumOrnamentumCompat {
         }
     };
 
+    private static final ClassValue<Optional<Method>> MAIN_COMPONENT_METHODS = new ClassValue<>() {
+        @Override
+        protected Optional<Method> computeValue(Class<?> type) {
+            try {
+                return Optional.of(type.getMethod("getMainComponent"));
+            } catch (ReflectiveOperationException ignored) {
+                return Optional.empty();
+            }
+        }
+    };
+
+    private static final ClassValue<Optional<Method>> COMPONENT_ID_METHODS = new ClassValue<>() {
+        @Override
+        protected Optional<Method> computeValue(Class<?> type) {
+            try {
+                return Optional.of(type.getMethod("getId"));
+            } catch (ReflectiveOperationException ignored) {
+                return Optional.empty();
+            }
+        }
+    };
+
     private static volatile ModelProperty<?> materialTextureProperty;
     private static volatile boolean materialTexturePropertyMissing;
     private static volatile Method textureDataDeserializer;
@@ -93,11 +122,11 @@ public final class DomumOrnamentumCompat {
     }
 
     public record BakePlan(ModelData modelData, BlockState modelState, BlockState colourState,
-                           int fallbackTintAbgr, boolean forceTint) {
-        private static final BakePlan EMPTY = new BakePlan(ModelData.EMPTY, null, null, -1, false);
+                           int fallbackTintAbgr, boolean forceTint, boolean independentModel) {
+        private static final BakePlan EMPTY = new BakePlan(ModelData.EMPTY, null, null, -1, false, false);
     }
 
-    private record VariantDescriptor(String key, CompoundTag data, BlockState colourState, int tintAbgr) {
+    private record VariantDescriptor(String key, CompoundTag data) {
     }
 
     public static boolean isLoaded() {
@@ -112,24 +141,78 @@ public final class DomumOrnamentumCompat {
         return id != null && VARIANT_TYPE.equals(id.getNamespace());
     }
 
-    public static void beginSection(Mapper mapper, LevelChunk chunk, LevelChunkSection section, int sectionY) {
+    public static BlockEntity[] captureBlockEntities(LevelChunk chunk) {
+        if (!LOADED || chunk == null || chunk.getBlockEntities().isEmpty()) {
+            return NO_BLOCK_ENTITIES;
+        }
+        ArrayList<BlockEntity> result = null;
+        for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
+            if (blockEntity != null && DOMUM_BLOCK_ENTITIES.get(blockEntity.getClass())) {
+                if (result == null) {
+                    result = new ArrayList<>();
+                }
+                result.add(blockEntity);
+            }
+        }
+        return result == null ? NO_BLOCK_ENTITIES : result.toArray(BlockEntity[]::new);
+    }
+
+    public static final class SectionBlockEntities {
+        private static final SectionBlockEntities EMPTY = new SectionBlockEntities(Map.of());
+        private final Map<Integer, BlockEntity[]> sections;
+
+        private SectionBlockEntities(Map<Integer, BlockEntity[]> sections) {
+            this.sections = sections;
+        }
+
+        public BlockEntity[] forSection(int sectionY) {
+            return this.sections.getOrDefault(sectionY, NO_BLOCK_ENTITIES);
+        }
+    }
+
+    /** Captures and groups Domum block entities in a single pass over the chunk. */
+    public static SectionBlockEntities captureBlockEntitiesBySection(LevelChunk chunk) {
+        if (!LOADED || chunk == null || chunk.getBlockEntities().isEmpty()) {
+            return SectionBlockEntities.EMPTY;
+        }
+
+        Map<Integer, ArrayList<BlockEntity>> buckets = null;
+        for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
+            if (blockEntity == null || !DOMUM_BLOCK_ENTITIES.get(blockEntity.getClass())) continue;
+            if (buckets == null) buckets = new HashMap<>();
+            buckets.computeIfAbsent(blockEntity.getBlockPos().getY() >> 4, ignored -> new ArrayList<>())
+                    .add(blockEntity);
+        }
+        if (buckets == null) return SectionBlockEntities.EMPTY;
+
+        Map<Integer, BlockEntity[]> sections = new HashMap<>(buckets.size());
+        buckets.forEach((sectionY, entities) ->
+                sections.put(sectionY, entities.toArray(BlockEntity[]::new)));
+        return new SectionBlockEntities(Map.copyOf(sections));
+    }
+
+    public static BlockEntity[] captureBlockEntities(LevelChunk chunk, LevelChunkSection section) {
+        if (!LOADED || section == null || !section.maybeHas(DOMUM_STATE_PREDICATE)) {
+            return NO_BLOCK_ENTITIES;
+        }
+        return captureBlockEntities(chunk);
+    }
+
+    public static void beginSection(Mapper mapper, BlockEntity[] blockEntities,
+                                    LevelChunkSection section, int sectionY) {
         if (!LOADED) {
             return;
         }
         SectionMappings mappings = SECTION_MAPPINGS.get();
         mappings.reset();
-        if (mapper == null || chunk == null || section == null || chunk.getBlockEntities().isEmpty()
+        if (mapper == null || blockEntities == null || blockEntities.length == 0 || section == null
                 || !section.maybeHas(DOMUM_STATE_PREDICATE)) return;
 
         int minY = sectionY << 4;
         int maxY = minY + 15;
         Map<Integer, BakePlan> plans = null;
 
-        for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
-            if (blockEntity == null || !DOMUM_BLOCK_ENTITIES.get(blockEntity.getClass())) {
-                continue;
-            }
-
+        for (BlockEntity blockEntity : blockEntities) {
             BlockPos pos = blockEntity.getBlockPos();
             if (pos.getY() < minY || pos.getY() > maxY) {
                 continue;
@@ -169,7 +252,7 @@ public final class DomumOrnamentumCompat {
                 if (plans.get(mappedId) == null) {
                     ModelData resolvedModelData = modelData == ModelData.EMPTY
                             ? createModelData(textureData) : modelData;
-                    plans.putIfAbsent(mappedId, createBakePlan(state, resolvedModelData, descriptor));
+                    plans.putIfAbsent(mappedId, createBakePlan(state, resolvedModelData, descriptor, textureData));
                 }
 
                 mappings.put(lx | (lz << 4) | (ly << 8), mappedId);
@@ -227,20 +310,26 @@ public final class DomumOrnamentumCompat {
                 return;
             }
             ModelData modelData = createModelData(textureData);
-            plansFor(mapper).putIfAbsent(blockId, createBakePlan(state, modelData, descriptor));
+            plansFor(mapper).putIfAbsent(blockId, createBakePlan(state, modelData, descriptor, textureData));
         } catch (Throwable ignored) {
         }
     }
 
-    private static BakePlan createBakePlan(BlockState state, ModelData modelData, VariantDescriptor descriptor) {
-        BlockState proxy = createStairProxy(state);
-        if (proxy != null && descriptor.tintAbgr() != -1) {
-            return new BakePlan(ModelData.EMPTY, proxy, null, descriptor.tintAbgr(), true);
-        }
+    private static BakePlan createBakePlan(BlockState state, ModelData modelData,
+                                           VariantDescriptor descriptor, Object textureData) {
         ModelData resolved = modelData == null || modelData == ModelData.EMPTY
                 ? createModelDataFromDescriptor(descriptor)
                 : modelData;
-        return new BakePlan(resolved, null, descriptor.colourState(), descriptor.tintAbgr(), false);
+        BlockState colourState = selectMaterialState(state, textureData);
+        int tintAbgr = resolveTint(colourState);
+
+        // Prefer Domum's real retextured model. The proxy is only a last-resort shape when
+        // model data could not be reconstructed (for example after incompatible saved data).
+        BlockState proxy = resolved == ModelData.EMPTY ? createStairProxy(state) : null;
+        if (proxy != null && tintAbgr != -1) {
+            return new BakePlan(ModelData.EMPTY, proxy, null, tintAbgr, true, true);
+        }
+        return new BakePlan(resolved, null, colourState, tintAbgr, false, true);
     }
 
     private static ModelData createModelDataFromDescriptor(VariantDescriptor descriptor) {
@@ -258,8 +347,7 @@ public final class DomumOrnamentumCompat {
             if (data == null || data.isEmpty()) {
                 return null;
             }
-            BlockState colourState = selectMaterialState(textureData);
-            return new VariantDescriptor(canonicalKey(data), data.copy(), colourState, resolveTint(colourState));
+            return new VariantDescriptor(canonicalKey(data), data.copy());
         } catch (Throwable ignored) {
             return null;
         }
@@ -328,13 +416,33 @@ public final class DomumOrnamentumCompat {
         }
     }
 
-    private static BlockState selectMaterialState(Object textureData) {
+    private static BlockState selectMaterialState(BlockState ownerState, Object textureData) {
         try {
             Optional<Method> method = TEXTURED_COMPONENT_METHODS.get(textureData.getClass());
             if (method.isEmpty()) return null;
             Object value = method.get().invoke(textureData);
             if (!(value instanceof Map<?, ?> components) || components.isEmpty()) {
                 return null;
+            }
+
+            // Domum exposes the semantic main component on its block types. Prefer it over
+            // name heuristics so Voxy obtains the same biome/constant colour provider as
+            // the material which visually dominates this particular independent model.
+            if (ownerState != null) {
+                Optional<Method> mainMethod = MAIN_COMPONENT_METHODS.get(ownerState.getBlock().getClass());
+                if (mainMethod.isPresent()) {
+                    Object mainComponent = mainMethod.get().invoke(ownerState.getBlock());
+                    if (mainComponent != null) {
+                        Optional<Method> idMethod = COMPONENT_ID_METHODS.get(mainComponent.getClass());
+                        if (idMethod.isPresent()) {
+                            Object mainId = idMethod.get().invoke(mainComponent);
+                            Object mainMaterial = components.get(mainId);
+                            if (mainMaterial instanceof Block block && block != Blocks.AIR) {
+                                return block.defaultBlockState();
+                            }
+                        }
+                    }
+                }
             }
 
             var entries = new ArrayList<>(components.entrySet());

@@ -32,6 +32,7 @@ import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.lwjgl.system.MemoryUtil;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import static org.lwjgl.opengl.GL11.*;
@@ -42,6 +43,10 @@ import static org.lwjgl.opengl.GL21.GL_PIXEL_PACK_BUFFER;
 
 public class SoftwareModelTextureBakery {
     private static final Matrix4f[] VIEWS = new Matrix4f[6];
+    private static final Direction[] BAKE_DIRECTIONS = {
+            Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH,
+            Direction.WEST, Direction.EAST, null
+    };
 
     private final ReuseVertexConsumer opaqueVC = new ReuseVertexConsumer();
     private final ReuseVertexConsumer translucentVC = new ReuseVertexConsumer(1);
@@ -119,28 +124,44 @@ public class SoftwareModelTextureBakery {
         int diagonalFamilies = 0;
         int unculledQuads = 0;
 
-        for (Direction direction : new Direction[] { Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH,
-                Direction.WEST, Direction.EAST, null }) {
-            var random = new SingleThreadedRandomSource(42L);
-            var quads = model.getQuads(modelState, direction, random, modelData, layer);
-
-            if (direction != null && !quads.isEmpty()) {
-                crossCandidate = false;
+        List<RenderType> layers = List.of(layer);
+        if (plan.independentModel()) {
+            try {
+                var declaredLayers = model.getRenderTypes(modelState,
+                        new SingleThreadedRandomSource(42L), modelData).asList();
+                if (!declaredLayers.isEmpty()) {
+                    layers = declaredLayers;
+                }
+            } catch (Throwable ignored) {
+                // Keep the state's normal layer as a safe fallback for malformed or
+                // version-incompatible optional model data.
             }
+        }
 
-            for (var quad : quads) {
-                if (direction == null && crossCandidate) {
-                    int family = classifyGroundCrossQuad(quad.getVertices());
-                    if (family == 0) {
-                        crossCandidate = false;
-                    } else {
-                        diagonalFamilies |= family;
-                        unculledQuads++;
-                    }
+        var random = new SingleThreadedRandomSource(42L);
+        for (RenderType renderLayer : layers) {
+            for (Direction direction : BAKE_DIRECTIONS) {
+                random.setSeed(42L);
+                var quads = model.getQuads(modelState, direction, random, modelData, renderLayer);
+
+                if (direction != null && !quads.isEmpty()) {
+                    crossCandidate = false;
                 }
 
-                (layer == RenderType.translucent() ? this.translucentVC : this.opaqueVC)
-                        .quad(quad, forceSolidLeaves, layer, modelState);
+                for (var quad : quads) {
+                    if (direction == null && crossCandidate) {
+                        int family = classifyGroundCrossQuad(quad.getVertices());
+                        if (family == 0) {
+                            crossCandidate = false;
+                        } else {
+                            diagonalFamilies |= family;
+                            unculledQuads++;
+                        }
+                    }
+
+                    (renderLayer == RenderType.translucent() ? this.translucentVC : this.opaqueVC)
+                            .quad(quad, forceSolidLeaves, renderLayer, modelState);
+                }
             }
         }
 
@@ -359,9 +380,10 @@ public class SoftwareModelTextureBakery {
             if (!ModelFactory.isFluidBlockState(state)) {
                 throw new IllegalStateException();
             }
+            boolean surfaceOnlyFluid = ModelFactory.isLumiseneFluidBlockState(state);
             for (int i = 0; i < VIEWS.length; i++) {
                 // Supplement's Lumisene Fluids use surface-only LOD geometry.
-                if (ModelFactory.isLumiseneFluidBlockState(state) && isHorizontalFluidSideFace(i)) {
+                if (surfaceOnlyFluid && isHorizontalFluidSideFace(i)) {
                     continue;
                 }
 

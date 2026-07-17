@@ -102,10 +102,103 @@ public class TextureUtils {
     public static final int DEPTH_MODE_AVG = 1;
     public static final int DEPTH_MODE_MAX = 2;
     public static final int DEPTH_MODE_MIN = 3;
+    public static final int DEPTH_MODE_MEDIAN = 4;
+
+    /**
+     * Statistics used by model baking. Keeping these in one result avoids walking the
+     * same 16x16 face once for depth, again for bounds, again for coverage and once
+     * more for tint metadata.
+     */
+    public record FaceAnalysis(int writtenPixelCount,
+                               int minX, int maxX, int minY, int maxY,
+                               int tintState,
+                               long depthSum, int minDepth, int maxDepth,
+                               int medianDepth) {
+        public int[] bounds() {
+            return new int[]{this.minX, this.maxX, this.minY, this.maxY};
+        }
+
+        public float depth(int mode) {
+            if (this.writtenPixelCount == 0) return -1.0f;
+            return switch (mode) {
+                case DEPTH_MODE_AVG -> u2fdepth((int) (this.depthSum / this.writtenPixelCount));
+                case DEPTH_MODE_MAX -> u2fdepth(this.maxDepth);
+                case DEPTH_MODE_MIN -> u2fdepth(this.minDepth);
+                case DEPTH_MODE_MEDIAN -> u2fdepth(this.medianDepth);
+                default -> throw new IllegalArgumentException("Unknown depth mode: " + mode);
+            };
+        }
+    }
+
+    public static FaceAnalysis analyzeFace(ColourDepthTextureData texture, int checkMode) {
+        final int width = texture.width();
+        final int height = texture.height();
+        final int[] colours = texture.colour();
+        final int[] depths = texture.depth();
+        final int[] depthHistogram = new int[64];
+
+        int written = 0;
+        int minX = width;
+        int maxX = -1;
+        int minY = height;
+        int maxY = -1;
+        int minDepth = Integer.MAX_VALUE;
+        int maxDepth = Integer.MIN_VALUE;
+        long depthSum = 0L;
+        int tintCandidates = 0;
+        int tinted = 0;
+
+        for (int y = 0, index = 0; y < height; y++) {
+            for (int x = 0; x < width; x++, index++) {
+                if (!wasPixelWritten(texture, checkMode, index)) continue;
+
+                int depth = depths[index] >>> 8;
+                written++;
+                minX = Math.min(minX, x);
+                maxX = Math.max(maxX, x);
+                minY = Math.min(minY, y);
+                maxY = Math.max(maxY, y);
+                minDepth = Math.min(minDepth, depth);
+                maxDepth = Math.max(maxDepth, depth);
+                depthSum += depth;
+                depthHistogram[Math.min(depth >>> 18, 63)]++;
+
+                int colour = colours[index];
+                if ((colour & 0xFFFFFF) != 0 && (colour >>> 24) != 0) {
+                    tintCandidates++;
+                    if ((depths[index] & (1 << 7)) != 0) tinted++;
+                }
+            }
+        }
+
+        if (written == 0) {
+            return new FaceAnalysis(0, width, -1, height, -1, 0,
+                    0L, Integer.MAX_VALUE, Integer.MIN_VALUE, 0);
+        }
+
+        int target = (written - 1) >>> 1;
+        int accumulated = 0;
+        int medianBin = 0;
+        for (; medianBin < depthHistogram.length; medianBin++) {
+            accumulated += depthHistogram[medianBin];
+            if (accumulated > target) break;
+        }
+        // Model indentation is encoded to 1/64 later, so retaining the selected
+        // quantisation bin is both stable and sufficient here.
+        int medianDepth = Math.min(medianBin, 63) << 18;
+        int tintState = tintCandidates == 0 ? 0
+                : tinted == 0 ? 1
+                : tinted == tintCandidates ? 3 : 2;
+        return new FaceAnalysis(written, minX, maxX, minY, maxY, tintState,
+                depthSum, minDepth, maxDepth, medianDepth);
+    }
 
 
     //Computes depth info based on written pixel data
     public static float computeDepth(ColourDepthTextureData texture, int mode, int checkMode) {
+        if (mode == DEPTH_MODE_MEDIAN) {
+            return analyzeFace(texture, checkMode).depth(mode);
+        }
         final var colourData = texture.colour();
         final var depthData = texture.depth();
         long a = 0;

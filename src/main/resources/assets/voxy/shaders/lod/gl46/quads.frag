@@ -78,7 +78,7 @@ bool useBalancedLeafCutout() {
     return ((interData.x >> 1u) & 1u) == 1u;
 }
 
-vec2 varyBalancedLeafUV(vec2 localUV, vec2 tile, out uint transform) {
+vec2 varyBalancedLeafUV(vec2 localUV, vec2 tile, out uint transform, out uint leafHash) {
     uvec2 tilePos = uvec2(max(tile, vec2(0.0f)));
     uint hash = interData.w >> 16u;
     hash ^= tilePos.x * 0x9e3779b9u;
@@ -86,6 +86,7 @@ vec2 varyBalancedLeafUV(vec2 localUV, vec2 tile, out uint transform) {
     hash ^= hash >> 16u;
     hash *= 0x7feb352du;
     hash ^= hash >> 15u;
+    leafHash = hash;
     transform = hash & 7u;
 
     // Eight stable rotations/reflections preserve the resource-pack alpha
@@ -93,7 +94,19 @@ vec2 varyBalancedLeafUV(vec2 localUV, vec2 tile, out uint transform) {
     if ((transform & 1u) != 0u) localUV = localUV.yx;
     if ((transform & 2u) != 0u) localUV.x = 1.0f - localUV.x;
     if ((transform & 4u) != 0u) localUV.y = 1.0f - localUV.y;
-    return localUV;
+    // A small whole-texel phase shift breaks up highly symmetric alpha rings without
+    // another atlas sample or another leaf texture.
+    vec2 texelOffset = vec2((hash >> 3u) & 3u, (hash >> 5u) & 3u) / 16.0f;
+    return fract(localUV + texelOffset);
+}
+
+bool sparseBalancedLeafHole(vec2 localUV, uint hash) {
+    uvec2 pixel = uvec2(clamp(floor(localUV * 16.0f), vec2(0.0f), vec2(15.0f)));
+    hash ^= pixel.x * 0x27d4eb2du;
+    hash ^= pixel.y * 0x165667b1u;
+    hash ^= hash >> 15u;
+    hash *= 0x85ebca6bu;
+    return (hash & 63u) == 0u;
 }
 
 uint getFace() {
@@ -160,9 +173,10 @@ void main() {
     #endif
 
     uint leafTransform = 0u;
+    uint leafHash = 0u;
     vec2 localUV = modf(uv, tile);
     if (useBalancedLeafCutout()) {
-        localUV = varyBalancedLeafUV(localUV, tile, leafTransform);
+        localUV = varyBalancedLeafUV(localUV, tile, leafTransform, leafHash);
     }
     vec2 uv2 = localUV*(1.0/(vec2(3.0,2.0)*256.0));
     vec4 colour;
@@ -219,6 +233,9 @@ void main() {
     float cutoutAlpha = useBalancedLeafCutout()
             ? colour.a
             : textureLod(blockModelAtlas, texPos, 0).a;
+    if (useBalancedLeafCutout() && sparseBalancedLeafHole(localUV, leafHash)) {
+        cutoutAlpha = 0.0f;
+    }
     float cutoutThreshold = useBalancedLeafCutout() ? 0.42f : 0.1f;
     colour.a = 1.0f;
     if (useDiscard() && cutoutAlpha <= cutoutThreshold) {

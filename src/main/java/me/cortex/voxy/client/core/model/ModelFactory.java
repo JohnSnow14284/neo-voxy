@@ -36,7 +36,9 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.lighting.LevelLightEngine;
+import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
+import net.neoforged.fml.ModList;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.system.MemoryUtil;
 
@@ -64,6 +66,8 @@ import static org.lwjgl.opengl.GL11.*;
 public class ModelFactory {
     public static final int MODEL_TEXTURE_SIZE = 16;
     public static final int LAYERS = Integer.numberOfTrailingZeros(MODEL_TEXTURE_SIZE);
+    private static final Direction[] DIRECTIONS = Direction.values();
+    private static final Fluid LUMISENE_FLUID = resolveOptionalFluid("supplementaries", "lumisene");
 
     //TODO: replace the fluid BlockState with a client model id integer of the fluidState, requires looking up
     // the fluid state in the mipper
@@ -494,7 +498,16 @@ public class ModelFactory {
         //TODO: special case stuff like vines and glow lichen, where it can be represented by a single double sided quad
         // since that would help alot with perf of lots of vines, can be done by having one of the faces just not exist and the other be in no occlusion mode
 
-        var depths = computeModelDepth(textureData, checkMode, layer!=RenderType.solid()?TextureUtils.DEPTH_MODE_MIN:TextureUtils.DEPTH_MODE_AVG);
+        int depthMode = layer != RenderType.solid()
+                ? TextureUtils.DEPTH_MODE_MIN
+                : TextureUtils.DEPTH_MODE_MEDIAN;
+        TextureUtils.FaceAnalysis[] faceAnalysis = new TextureUtils.FaceAnalysis[6];
+        float[] depths = new float[6];
+        for (int face = 0; face < faceAnalysis.length; face++) {
+            var analysis = TextureUtils.analyzeFace(textureData[face], checkMode);
+            faceAnalysis[face] = analysis;
+            depths[face] = analysis.depth(depthMode);
+        }
 
         if (centeredGroundCross) {
             for (int face = 2; face < 6; face++) {
@@ -517,7 +530,7 @@ public class ModelFactory {
             boolean allTrue = true;
             boolean allFalse = true;
             //Guestimation test for if the block culls itself
-            for (var dir : Direction.values()) {
+            for (var dir : DIRECTIONS) {
                 if (blockState.skipRendering(blockState, dir)) {
                     allFalse = false;
                 } else {
@@ -567,8 +580,9 @@ public class ModelFactory {
                 fullyOpaque = false;
                 continue;
             }
-            var faceSize = TextureUtils.computeBounds(textureData[face], checkMode);
-            int writeCount = TextureUtils.getWrittenPixelCount(textureData[face], checkMode);
+            var analysis = faceAnalysis[face];
+            var faceSize = analysis.bounds();
+            int writeCount = analysis.writtenPixelCount();
 
             boolean faceCoversFullBlock = faceSize[0] == 0 && faceSize[2] == 0 &&
                     faceSize[1] == (MODEL_TEXTURE_SIZE-1) && faceSize[3] == (MODEL_TEXTURE_SIZE-1);
@@ -630,7 +644,7 @@ public class ModelFactory {
 
             //Bits 24,25 are tint metadata
             if (colourProvider!=null) {//We have a colour provider
-                int tintState = TextureUtils.computeFaceTint(textureData[face], checkMode);
+                int tintState = analysis.tintState();
                 if (tintState == 2) {//Partial tint
                     faceModelData |= 1<<24;
                 } else if (tintState == 3) {//Full tint
@@ -869,12 +883,13 @@ public class ModelFactory {
     }
 
     public static boolean isLumiseneFluidBlockState(BlockState state) {
-        FluidState fluidState = state.getFluidState();
-        if (fluidState.isEmpty()) {
-            return false;
-        }
-        var id = BuiltInRegistries.FLUID.getKey(fluidState.getType());
-        return id != null && id.getNamespace().equals("supplementaries") && id.getPath().equals("lumisene");
+        return LUMISENE_FLUID != null && state.getFluidState().getType() == LUMISENE_FLUID;
+    }
+
+    private static Fluid resolveOptionalFluid(String namespace, String path) {
+        if (!ModList.get().isLoaded(namespace)) return null;
+        return BuiltInRegistries.FLUID.getOptional(ResourceLocation.fromNamespaceAndPath(namespace, path))
+                .orElse(null);
     }
 
     //TODO: add a method to detect biome dependent colours (can do by detecting if getColor is ever called)
@@ -987,26 +1002,6 @@ public class ModelFactory {
         colorProvider.getColor(state, getter, BlockPos.ZERO, 0);
         colorProvider.getColor(state, getter, BlockPos.ZERO, 1);
         return biomeDependent[0];
-    }
-
-    private static float[] computeModelDepth(ColourDepthTextureData[] textures, int checkMode) {
-        return computeModelDepth(textures, checkMode, TextureUtils.DEPTH_MODE_AVG);
-    }
-
-    private static float[] computeModelDepth(ColourDepthTextureData[] textures, int checkMode, int computeMode) {
-        float[] res = new float[6];
-        for (var dir : Direction.values()) {
-            var data = textures[dir.get3DDataValue()];
-            float fd = TextureUtils.computeDepth(data, computeMode, checkMode);//Compute the min float depth, smaller means closer to the camera, range 0-1
-            //int depth = Math.round(fd * MODEL_TEXTURE_SIZE);
-            //If fd is -1, it means that there was nothing rendered on that face and it should be discarded
-            if (fd < -0.1) {
-                res[dir.ordinal()] = -1;
-            } else {
-                res[dir.ordinal()] = fd;//((float) depth)/MODEL_TEXTURE_SIZE;
-            }
-        }
-        return res;
     }
 
     public int[] _unsafeRawAccess() {

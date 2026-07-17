@@ -5,6 +5,7 @@ import me.cortex.voxy.common.world.service.VoxelIngestService;
 import me.cortex.voxy.commonImpl.VoxyCommon;
 import me.cortex.voxy.commonImpl.VoxyInstance;
 import me.cortex.voxy.commonImpl.WorldIdentifier;
+import me.cortex.voxy.commonImpl.compat.DomumOrnamentumCompat;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -17,6 +18,7 @@ import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.dimension.DimensionType;
 
@@ -60,9 +62,15 @@ public abstract class MixinClientLevel {
     private void voxy$injectIngestOnStateChange(BlockPos pos, BlockState old, BlockState updated, CallbackInfo cir) {
         if (old == updated) return;
 
+        // Domum requests a model-data rebuild through setBlocksDirty(AIR, state).
+        // Treat that notification as the cache invalidation event for its independent
+        // Voxy model; this avoids polling block entities on ticks or render frames.
+        boolean domumUpdate = DomumOrnamentumCompat.isDomumState(old)
+                || DomumOrnamentumCompat.isDomumState(updated);
+
         //TODO: is this _really_ needed, we should have enough processing power to not need todo it if its only a
         // block removal
-        if (!updated.isAir()) return;
+        if (!domumUpdate && !updated.isAir()) return;
         if (VoxyCommon.getInstance()==null) return;
         if (!VoxyConfig.CONFIG.ingestEnabled) return;//Only ingest if setting enabled
 
@@ -75,18 +83,19 @@ public abstract class MixinClientLevel {
         int x = pos.getX()&15;
         int y = pos.getY()&15;
         int z = pos.getZ()&15;
-        if (x == 0 || x==15 || y==0 || y==15 || z==0||z==15) {//Update if there is a statechange on the boarder
+        if (domumUpdate || x == 0 || x==15 || y==0 || y==15 || z==0||z==15) {//Update if there is a statechange on the boarder
             var csp = SectionPos.of(pos);
             //Is not using voxy$cheekyGetChunk as dont think is need
             var chunk = self.getChunk(pos.getX()>>4, pos.getZ()>>4, ChunkStatus.FULL, false);
-            if (chunk != null) {
-                var section = chunk.getSection(csp.y() - this.bottomSectionY);
+            if (chunk instanceof LevelChunk levelChunk) {
+                var section = levelChunk.getSection(csp.y() - this.bottomSectionY);
                 var lp = self.getLightEngine();
 
                 var blp = lp.getLayerListener(LightLayer.BLOCK).getDataLayerData(csp);
                 var slp = lp.getLayerListener(LightLayer.SKY).getDataLayerData(csp);
 
-                VoxelIngestService.rawIngest(wi, section, csp.x(), csp.y(), csp.z(), blp == null ? null : blp.copy(), slp == null ? null : slp.copy());
+                VoxelIngestService.rawIngest(wi, levelChunk, section, csp.x(), csp.y(), csp.z(),
+                        blp == null ? null : blp.copy(), slp == null ? null : slp.copy());
             }
         }
     }

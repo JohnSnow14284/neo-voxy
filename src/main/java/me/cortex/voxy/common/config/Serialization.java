@@ -85,31 +85,39 @@ public class Serialization {
         Map<Class<?>, GsonConfigSerialization<?>> serializers = new HashMap<>();
 
         // Force static initialization so each config type registers itself.
-        String[] configClassNames = {
+        String[][] configClassNames = {
             // Compressor configs (extend CompressorConfig)
-            "me.cortex.voxy.common.config.compressors.LZ4Compressor$Config",
-            "me.cortex.voxy.common.config.compressors.ZSTDCompressor$Config",
+            {"me.cortex.voxy.common.config.compressors.LZ4Compressor$Config"},
+            {"me.cortex.voxy.common.config.compressors.ZSTDCompressor$Config"},
 
             // Storage configs (extend StorageConfig)
-            "me.cortex.voxy.common.config.storage.lmdb.LMDBStorageBackend$Config",
-            "me.cortex.voxy.common.config.storage.inmemory.MemoryStorageBackend$Config",
-            "me.cortex.voxy.common.config.storage.redis.RedisStorageBackend$Config",
-            "me.cortex.voxy.common.config.storage.rocksdb.RocksDBStorageBackend$Config",
-            "me.cortex.voxy.common.config.storage.other.ReadonlyCachingLayer$Config",
-            "me.cortex.voxy.common.config.storage.other.CompressionStorageAdaptor$Config",
-            "me.cortex.voxy.common.config.storage.other.ConditionalStorageBackendConfig",
-            "me.cortex.voxy.common.config.storage.other.FragmentedStorageBackendAdaptor$Config",
-            "me.cortex.voxy.common.config.storage.other.FragmentedStorageBackendAdaptor$Config2",
-            "me.cortex.voxy.common.config.storage.other.BasicPathInsertionConfig",
+            {"me.cortex.voxy.common.config.storage.lmdb.LMDBStorageBackend$Config"},
+            {"me.cortex.voxy.common.config.storage.inmemory.MemoryStorageBackend$Config"},
+            {"me.cortex.voxy.common.config.storage.redis.RedisStorageBackend$Config", "redis.clients.jedis.JedisPool"},
+            {"me.cortex.voxy.common.config.storage.rocksdb.RocksDBStorageBackend$Config", "org.rocksdb.RocksDB"},
+            {"me.cortex.voxy.common.config.storage.other.ReadonlyCachingLayer$Config"},
+            {"me.cortex.voxy.common.config.storage.other.CompressionStorageAdaptor$Config"},
+            {"me.cortex.voxy.common.config.storage.other.ConditionalStorageBackendConfig"},
+            {"me.cortex.voxy.common.config.storage.other.FragmentedStorageBackendAdaptor$Config"},
+            {"me.cortex.voxy.common.config.storage.other.FragmentedStorageBackendAdaptor$Config2"},
+            {"me.cortex.voxy.common.config.storage.other.BasicPathInsertionConfig"},
 
             // Section storage configs (extend SectionStorageConfig)
-            "me.cortex.voxy.common.config.section.SectionSerializationStorage$Config"
+            {"me.cortex.voxy.common.config.section.SectionSerializationStorage$Config"}
         };
 
         int count = 0;
         outer:
-        for (String className : configClassNames) {
+        for (String[] registration : configClassNames) {
+            String className = registration[0];
             try {
+                if (registration.length > 1) {
+                    try {
+                        Class.forName(registration[1], false, Serialization.class.getClassLoader());
+                    } catch (ClassNotFoundException | NoClassDefFoundError unavailable) {
+                        continue;
+                    }
+                }
                 // Use 3-arg Class.forName with initialize=true to run static initializers
                 // This populates CONFIG_TYPES via parent class static blocks
                 Class<?> original = Class.forName(className, true, Serialization.class.getClassLoader());
