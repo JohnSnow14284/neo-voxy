@@ -1,0 +1,43 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "LGPL-3.0-only"
+
+[[mods]]
+modId = "voxy"
+version = "0.2.18-beta"
+displayName = "Voxy"
+logoFile = "assets/voxy/icon.png"
+authors = "Cortex, NeoForge port contributors"
+description = '''
+An experimental level-of-detail renderer for Minecraft.
+'''
+
+[modproperties.voxy]
+"sodium:config_api_user" = "me.cortex.voxy.client.config.VoxyConfigMenu"
+
+[[mixins]]
+config = "common.voxy.mixins.json"
+
+[[mixins]]
+config = "client.voxy.mixins.json"
+
+[[dependencies.voxy]]
+modId = "neoforge"
+type = "required"
+versionRange = "[26.1.2.10-beta,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.voxy]]
+modId = "sodium"
+type = "required"
+versionRange = "[0.9.1,)"
+ordering = "AFTER"
+side = "CLIENT"
+
+[[dependencies.voxy]]
+modId = "iris"
+type = "optional"
+versionRange = "[1.11.2,)"
+ordering = "AFTER"
+side = "CLIENT"

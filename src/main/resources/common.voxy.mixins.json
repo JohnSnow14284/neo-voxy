@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "package": "me.cortex.voxy.commonImpl.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "mixins": [
+    "minecraft.MixinWorld"
+  ],
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

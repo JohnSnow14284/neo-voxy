@@ -1,0 +1,45 @@
+{
+  "required": true,
+  "package": "me.cortex.voxy.client.mixin",
+  "plugin": "me.cortex.voxy.client.mixin.VoxyMixinPlugin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "iris.CustomUniformsAccessor",
+    "iris.IrisRenderingPipelineAccessor",
+    "iris.MixinIris",
+    "iris.MixinIrisRenderingPipeline",
+    "iris.MixinIrisSamplers",
+    "iris.MixinLevelRenderer",
+    "iris.MixinMatrixUniforms",
+    "iris.MixinProgramSet",
+    "iris.MixinShaderPackSourceNames",
+    "iris.MixinStandardMacros",
+    "minecraft.MixinClientChunkCache",
+    "minecraft.MixinClientLevel",
+    "minecraft.AccessorBossHealthOverlay",
+    "minecraft.InvokerDebugScreenEntries",
+    "minecraft.MixinDebugScreenEntryList",
+    "minecraft.MixinFogRenderer",
+    "minecraft.MixinLevelRenderer",
+    "minecraft.MixinRenderSystem",
+    "minecraft.session.MixinClientPacketListener",
+    "minecraft.session.MixinMinecraft",
+    "minecraft.util.MixinBlockableEventLoop",
+    "minecraft.util.MixinClientCommonPacketListenerImpl",
+    "minecraft.util.MixinGlDebug",
+    "minecraft.util.MixinGPUSelect",
+    "sodium.AccessorChunkTracker",
+    "sodium.AccessorSodiumWorldRenderer",
+    "sodium.MixinDefaultChunkRenderer",
+    "sodium.MixinFallbackVisibleChunkCollector",
+    "sodium.MixinRenderSectionManager",
+    "sodium.MixinSodiumWorldRenderer",
+    "sodium.MixinVisibleChunkCollector"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

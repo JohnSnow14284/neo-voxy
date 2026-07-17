@@ -1,0 +1,100 @@
+{
+  "jars": [
+    {
+      "identifier": {
+        "group": "org.apache.commons",
+        "artifact": "commons-pool2"
+      },
+      "version": {
+        "range": "[2.12.0,)",
+        "artifactVersion": "2.12.0"
+      },
+      "path": "META-INF/jarjar/commons-pool2-2.12.0.jar",
+      "isObfuscated": false
+    },
+    {
+      "identifier": {
+        "group": "org.lwjgl",
+        "artifact": "lwjgl-lmdb"
+      },
+      "version": {
+        "range": "[3.4.1,)",
+        "artifactVersion": "3.4.1"
+      },
+      "path": "META-INF/jarjar/lwjgl-lmdb-3.4.1.jar",
+      "isObfuscated": false
+    },
+    {
+      "identifier": {
+        "group": "org.lwjgl",
+        "artifact": "lwjgl-zstd"
+      },
+      "version": {
+        "range": "[3.4.1,)",
+        "artifactVersion": "3.4.1"
+      },
+      "path": "META-INF/jarjar/lwjgl-zstd-3.4.1.jar",
+      "isObfuscated": false
+    },
+    {
+      "identifier": {
+        "group": "org.lz4",
+        "artifact": "lz4-java"
+      },
+      "version": {
+        "range": "[1.8.0,)",
+        "artifactVersion": "1.8.0"
+      },
+      "path": "META-INF/jarjar/lz4-java-1.8.0.jar",
+      "isObfuscated": false
+    },
+    {
+      "identifier": {
+        "group": "org.rocksdb",
+        "artifact": "rocksdbjni"
+      },
+      "version": {
+        "range": "[10.2.1,)",
+        "artifactVersion": "10.2.1"
+      },
+      "path": "META-INF/jarjar/rocksdbjni-10.2.1.jar",
+      "isObfuscated": false
+    },
+    {
+      "identifier": {
+        "group": "org.tukaani",
+        "artifact": "xz"
+      },
+      "version": {
+        "range": "[1.10,)",
+        "artifactVersion": "1.10"
+      },
+      "path": "META-INF/jarjar/xz-1.10.jar",
+      "isObfuscated": false
+    },
+    {
+      "identifier": {
+        "group": "org.xerial",
+        "artifact": "sqlite-jdbc"
+      },
+      "version": {
+        "range": "[3.49.1.0,)",
+        "artifactVersion": "3.49.1.0"
+      },
+      "path": "META-INF/jarjar/sqlite-jdbc-3.49.1.0.jar",
+      "isObfuscated": false
+    },
+    {
+      "identifier": {
+        "group": "redis.clients",
+        "artifact": "jedis"
+      },
+      "version": {
+        "range": "[5.1.0,)",
+        "artifactVersion": "5.1.0"
+      },
+      "path": "META-INF/jarjar/jedis-5.1.0.jar",
+      "isObfuscated": false
+    }
+  ]
+}

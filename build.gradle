@@ -1,0 +1,60 @@
+plugins {
+    id 'net.neoforged.moddev' version '2.0.141'
+    id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+}
+
+neoForge {
+    version = project.neoforge_version
+    accessTransformers.from(file('src/main/resources/META-INF/accesstransformer.cfg'))
+
+    runs {
+        client {
+            client()
+        }
+    }
+
+    mods {
+        voxy {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+dependencies {
+    // The recovered production artifact is the source of truth for these
+    // compile-time APIs and bundled runtime libraries.
+    compileOnly files('libs/compile/sodium-neoforge-0.9.1+mc26.1.2-mod.jar')
+    compileOnly files('libs/compile/iris-neoforge-1.11.2+mc26.1.2.jar')
+    compileOnly fileTree('src/main/resources/META-INF/jarjar') {
+        include '*.jar'
+    }
+
+    runtimeOnly files('libs/runtime/sodium-neoforge-0.9.1+mc26.1.2.jar')
+    runtimeOnly files('libs/runtime/iris-neoforge-1.11.2+mc26.1.2.jar')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 25
+    options.deprecation = true
+}
+
+jar {
+    archiveFileName = "${project.archives_base_name}-${project.version}.jar"
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
