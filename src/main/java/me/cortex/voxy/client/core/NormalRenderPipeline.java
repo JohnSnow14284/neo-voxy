@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import me.cortex.voxy.client.config.VoxyConfig;
 import me.cortex.voxy.client.core.gl.GlFramebuffer;
 import me.cortex.voxy.client.core.gl.GlTexture;
+import me.cortex.voxy.client.core.rendering.LodBoundaryFade;
 import me.cortex.voxy.client.core.rendering.Viewport;
 import me.cortex.voxy.client.core.rendering.hierachical.AsyncNodeManager;
 import me.cortex.voxy.client.core.rendering.hierachical.HierarchicalOcclusionTraverser;
@@ -16,6 +17,8 @@ import java.util.List;
 import java.util.function.BooleanSupplier;
 
 import static org.lwjgl.opengl.GL11C.GL_BLEND;
+import static org.lwjgl.opengl.GL11C.GL_ALWAYS;
+import static org.lwjgl.opengl.GL11C.GL_COLOR;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_COMPONENT;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_TEST;
 import static org.lwjgl.opengl.GL11C.GL_NEAREST;
@@ -33,6 +36,7 @@ import static org.lwjgl.opengl.GL20C.glUniform4f;
 import static org.lwjgl.opengl.GL30C.*;
 import static org.lwjgl.opengl.GL43.GL_DEPTH_STENCIL_TEXTURE_MODE;
 import static org.lwjgl.opengl.GL45C.glBindTextureUnit;
+import static org.lwjgl.opengl.GL45C.glClearNamedFramebufferfv;
 import static org.lwjgl.opengl.GL45C.glTextureParameterf;
 import static org.lwjgl.opengl.GL42C.GL_FRAMEBUFFER_BARRIER_BIT;
 import static org.lwjgl.opengl.GL42C.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT;
@@ -40,6 +44,7 @@ import static org.lwjgl.opengl.GL42C.GL_TEXTURE_FETCH_BARRIER_BIT;
 import static org.lwjgl.opengl.GL42C.glMemoryBarrier;
 
 public class NormalRenderPipeline extends AbstractRenderPipeline {
+    private static final float[] CLEAR_COLOUR = {0.0f, 0.0f, 0.0f, 0.0f};
     private GlTexture colourTex;
     private GlTexture colourSSAOTex;
     private final GlFramebuffer fbSSAO = new GlFramebuffer();
@@ -78,7 +83,12 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
             glTextureParameterf(this.fb.getDepthTex().id, GL_DEPTH_STENCIL_TEXTURE_MODE, GL_DEPTH_COMPONENT);
         }
 
-        this.initDepthStencil(sourceFB, this.fb.framebuffer.id, viewport.width, viewport.height, viewport.width, viewport.height);
+        // Guarded transition pixels can intentionally contain depth without LOD
+        // colour. Clear the private target so those pixels fall back to vanilla
+        // instead of reusing colour from an older frame.
+        glClearNamedFramebufferfv(this.fb.framebuffer.id, GL_COLOR, 0, CLEAR_COLOUR);
+        this.initDepthStencil(viewport, sourceFB, this.fb.framebuffer.id,
+                viewport.width, viewport.height, viewport.width, viewport.height);
 
         return this.fb.getDepthTex().id;
     }
@@ -130,9 +140,19 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
         glEnable(GL_BLEND);
         // The LOD target stores straight-alpha translucency.
         glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        boolean circularHandoff = LodBoundaryFade.getDistances().enabled();
+        if (circularHandoff) {
+            // The stencil pass already chose one terrain owner for each pixel.
+            // Do not compare Voxy's simplified depth against vanilla's slightly
+            // different surface depth a second time during compositing.
+            glDepthFunc(GL_ALWAYS);
+        }
         AbstractRenderPipeline.transformBlitDepth(this.finalBlit, this.fb.getDepthTex().id,
                 sourceFrameBuffer, viewport,
                 this.targetTransform.set(viewport.vanillaProjection).mul(viewport.modelView));
+        if (circularHandoff) {
+            glDepthFunc(this.properties.closerEqualDepthCompare());
+        }
         glDisable(GL_BLEND);
     }
 

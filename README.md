@@ -1,171 +1,87 @@
 # Neo-Voxy
 
-**Neo-Voxy** 是 Voxy 的 Minecraft 1.21.1 NeoForge 非官方移植与兼容性维护版本。项目在保留 Voxy 高性能远景 LOD 架构的基础上，重点改进 NeoForge、Sodium、Iris 及常见模组环境下的稳定性与视觉表现。
+Neo-Voxy 是 Voxy 的非官方 NeoForge 移植与兼容性维护版本，当前同时支持 Minecraft **1.21.1** 与 **26.1.2**。项目版本为 **0.2.18-beta**。
 
-**Neo-Voxy** is an unofficial Minecraft 1.21.1 NeoForge port and compatibility-focused continuation of Voxy. It preserves Voxy's high-performance distant-terrain LOD architecture while improving stability and visual quality across NeoForge, Sodium, Iris, and common modded environments.
-
-> Voxy 由 [MCRcortex](https://github.com/MCRcortex) 创建。本项目不是 Voxy 官方版本，也不代表原作者、Mojang、Microsoft、NeoForge、Sodium 或 Iris。
+> [!CAUTION]
+> ## 光影兼容警告：不要重复启用 LOD 淡入
 >
-> Voxy was created by [MCRcortex](https://github.com/MCRcortex). This project is unofficial and is not endorsed by the original author, Mojang, Microsoft, NeoForge, Sodium, or Iris.
+> Neo-Voxy 的“圆形 LOD 淡入”**不适用于已经自带 LOD 淡入/淡出功能的光影包，例如 Photon**。
+>
+> 使用这类光影时，请在 Sodium 视频设置的 Neo-Voxy 页面中**关闭“圆形 LOD 淡入”**。同时启用两套淡入可能产生噪点、重复过渡、亮度异常或阴影边界割裂。
 
----
+> [!NOTE]
+> 26.1.2 已获得正式源码与构建支持，但其专项模组兼容功能仍少于 1.21.1。请以本文的功能表为准。
 
-## 特色功能 / Highlights
+## 特色功能
 
-- **高性能远景 LOD / High-performance distant LOD**
-  在原版区块范围之外绘制低细节地形，在扩展可视距离的同时控制 CPU、内存与 GPU 开销。
-  Renders reduced-detail terrain beyond the vanilla chunk range while keeping CPU, memory, and GPU overhead under control.
+| 功能 | 1.21.1 | 26.1.2 | 说明 |
+|---|:---:|:---:|---|
+| 高性能远景地形 LOD | ✅ | ✅ | 在原版区块范围外使用简化地形扩展可视距离 |
+| NeoForge 原生运行 | ✅ | ✅ | 分别适配对应版本的 NeoForge |
+| Sodium 渲染集成 | ✅ | ✅ | 接入区块渲染、深度与配置界面 |
+| Iris 光影兼容 | ✅ | ✅ | 兼容性仍取决于具体光影包 |
+| 圆形 LOD 淡入 | ✅ | ✅ | 以玩家为中心交接原版地形和 LOD，避免整区块突变 |
+| 像素级有序过渡 | ✅ | ✅ | 使用稳定的 8×8 有序覆盖减少大块噪点与闪烁 |
+| 水体独立交接 | ✅ | ✅ | 水体不使用圆形淡入，避免方形与圆形边界叠加 |
+| Iris 阴影边界协同渐隐 | ✅ | ✅ | 不增加额外地形绘制批次 |
+| 父级 LOD 残留与空洞修复 | ✅ | ✅ | 改善移动、重载和层级转换后的缺块 |
+| 保存与退出阻塞修复 | ✅ | ✅ | 改善世界关闭、任务清理与存储释放 |
+| 自动关闭 Sodium 区块淡入 | — | ✅ | 避免与 Voxy 的区块交接重复 |
+| 无光影水体专项优化 | ✅ | — | 改善透明度、雾、水下和岸线表现 |
+| 可调树叶 LOD | ✅ | — | 性能、平衡和质量三种模式 |
+| 扩展区块请求 | ✅ | — | 单人游戏可逐步扩展远景区块请求 |
+| 远距离玩家与乘骑物 | ✅ | — | 使用轻量快照渲染远处玩家 |
+| Supplement / Lumisene Fluids | ✅ | — | 专用流体颜色、透明度和 LOD 表面处理 |
+| Domum Ornamentum | ✅ | — | 动态材质、颜色映射与轻量代理模型 |
 
-- **Sodium 渲染集成 / Sodium rendering integration**
-  接入 Sodium 的区块渲染阶段、相机数据与配置界面，同时保留 Voxy 专用的高性能 LOD 渲染器。
-  Integrates with Sodium's terrain stages, camera data, and options UI while retaining Voxy's dedicated LOD renderer.
+`—` 表示该分支尚未实现此项功能，而不是对应模组一定无法与基础 LOD 同时运行。
 
-- **扩展区块请求 / Extended chunk requests**
-  单人游戏最高可请求 127 区块；移动时保持 32 区块以优先刷新原版地形，停止后再逐级扩展远景请求。
-  Singleplayer can request up to 127 chunks; it stays at 32 while moving to prioritise vanilla terrain, then gradually expands the distant request while stationary.
+## 兼容性
 
-- **远距离玩家与乘骑物 / Far players and ridden vehicles**
-  采用 SeeU 风格的轻量玩家快照渲染远距离玩家；马、船等实体仅在玩家实际乘骑时创建代理。
-  Uses SeeU-style snapshots for far players and only creates horse, boat or other vehicle proxies while actually ridden.
+| 项目 | 1.21.1 分支 | 26.1.2 分支 |
+|---|---|---|
+| Minecraft | 1.21.1 | 26.1.2 |
+| NeoForge | 21.1.x | 26.1.2.x |
+| Java | 21 | 25 |
+| Sodium | 0.8.x | 0.9.1 |
+| Iris | 1.8.x | 1.11.2 |
+| Supplement | 支持专项兼容 | 暂无专项兼容 |
+| Domum Ornamentum | 支持专项兼容 | 暂无专项兼容 |
+| 光影包 | 视光影实现而定 | 视光影实现而定 |
 
-  单人游戏自动具备服务端支持；多人游戏的远距离玩家快照要求服务端也安装本版本。若安装独立 SeeU，Voxy 的内置玩家代理会自动停用以避免重复渲染。
-  Singleplayer includes the server side automatically; multiplayer far-player snapshots require this version on the server too. The built-in player proxy disables itself when standalone SeeU is installed.
+Neo-Voxy 不再强制要求 Forgified Fabric API 作为独立前置。最终依赖关系以发布页面和模组加载器提示为准。
 
-- **无光影水体优化 / No-shader water improvements**
-  采用直通 Alpha 烘焙、标准 `SRC_ALPHA` 合成和流体面排序，改善关闭光影时远景水体的颜色、透明度、雾中表现与岸线衔接。
-  Uses straight-alpha baking, standard `SRC_ALPHA` compositing, and ordered fluid-face submission to improve distant water colour, transparency, fog blending, and shorelines without shaders.
+## 圆形 LOD 淡入
 
-- **模组植物兼容 / Modded plant compatibility**
-  支持标准交叉面地面植物的轻量 LOD 表现，并尽量避免影响作物、藤蔓、睡莲等特殊模型。
-  Supports lightweight crossed-plane LOD models for standard ground plants while avoiding unwanted changes to crops, vines, lily pads, and other special models.
+默认参数：
 
-- **Supplement 荧光液正式兼容 / First-class Supplement Lumisene Fluids compatibility**
-  正式兼容 Supplement 模组提供的 Lumisene Fluids（荧光液），包括流体颜色、透明度和 LOD 表面渲染。
-  Provides first-class support for the Lumisene Fluids feature included in the Supplement mod, including fluid colour, transparency, and LOD surface rendering.
+| 设置 | 默认值 | 作用 |
+|---|---:|---|
+| 圆形 LOD 淡入 | 开启 | 启用原版地形与 LOD 的平滑交接 |
+| 过渡宽度 | 16 格 | 控制有序交接带宽度 |
+| 安全内缩 | 8 格 | 在外沿后方保留已加载的原版地形 |
 
-- **Domum Ornamentum 正式兼容 / First-class Domum Ornamentum compatibility**
-  支持 Domum 动态材质、颜色映射与部分复杂外形的轻量代理模型，并仅在检测到 Domum 时启用相关逻辑。
-  Supports Domum dynamic materials, colour mapping, and lightweight proxy geometry for selected complex shapes, with the compatibility path enabled only when Domum is installed.
+该功能不对水体应用圆形过渡。修改设置后通常可直接生效；切换光影包后建议重新加载渲染器或重新进入世界。
 
-- **可调树叶 LOD / Configurable leaf LOD**
-  提供性能、平衡和质量三种树叶模式。默认的平衡模式会轻微变化各方向的烘焙纹理、剔除相邻树叶之间不可见的内部面，并使用 Mip 感知透明裁剪改善远景树冠。
-  Provides Fast, Balanced, and Quality foliage modes. The default Balanced mode adds subtle per-face texture variation, removes hidden internal faces between matching leaves, and uses mip-aware alpha cutout for cleaner distant canopies.
+## 安装
 
-- **保存与退出稳定性 / Save and shutdown reliability**
-  优化区块保存、卸载竞争与世界关闭顺序，降低退出世界时卡住或存储未完全释放的概率。
-  Improves section saving, unload races, and world shutdown ordering to reduce hangs and incomplete storage cleanup when leaving a world.
+1. 安装对应版本的 Minecraft、NeoForge、Java 与 Sodium。
+2. 如需光影，安装表中对应版本的 Iris。
+3. 将 Neo-Voxy JAR 放入实例的 `mods` 文件夹。
+4. 首次测试前建议备份世界与旧 Voxy 缓存。
 
----
+两个 Minecraft 版本的缓存和 JAR 不应混用。
 
-## 兼容性 / Compatibility
-
-| Component | Supported Version | Status | Notes |
-|---|---:|---|---|
-| Minecraft | 1.21.1 | Required | Current target version |
-| NeoForge | 21.1.x | Required | Native NeoForge build |
-| Java | 21 | Required | Java 25 may be used by CI |
-| Sodium | 0.8.x | Required | Rendering and options integration |
-| Iris | 1.8.x | Optional | Shader support depends on the selected shader pack |
-| Lithium | 0.15.x | Optional | Recommended general performance improvement |
-| Supplement | 1.21.1 builds | Supported | Includes Lumisene Fluids compatibility |
-| Domum Ornamentum | 1.21.1 builds | Supported | Dynamic material and proxy-model compatibility |
-
-Neo-Voxy 不再强制要求 Forgified Fabric API 作为独立前置；实际依赖以发布页面和模组加载器提示为准。
-
-Neo-Voxy no longer requires Forgified Fabric API as a separate mandatory prerequisite. The release page and loader dependency report remain the final source of truth.
-
----
-
-## 安装 / Installation
-
-1. 安装 Minecraft 1.21.1、NeoForge 21.1.x、Java 21 和兼容版本的 Sodium。
-   Install Minecraft 1.21.1, NeoForge 21.1.x, Java 21, and a compatible Sodium build.
-2. 将 `neo-voxy-<version>.jar` 放入实例的 `mods` 文件夹。
-   Place `neo-voxy-<version>.jar` in the instance's `mods` directory.
-3. 首次测试建议使用新世界，或提前备份世界与旧 Voxy 缓存。
-   A new test world, or a backup of the world and existing Voxy cache, is recommended for initial testing.
-4. 通过 Sodium 视频设置中的 Neo-Voxy 页面调整 LOD 与扩展区块请求参数。
-   Configure LOD and extended chunk request settings from the Neo-Voxy page in Sodium's video settings.
-
----
-
-## 配置说明 / Configuration Notes
-
-- 修改较大的 LOD 参数后，部分内容可能需要重新进入世界、重新加载渲染器或重建旧缓存才能完全体现。
-  After major LOD setting changes, re-entering the world, reloading the renderer, or rebuilding old cache data may be required.
-- Domum Ornamentum 的旧缓存可能缺少动态材质信息；测试新兼容逻辑时建议清理对应世界的旧 Voxy 缓存。
-  Old Domum Ornamentum cache data may not contain dynamic material metadata; clearing the affected world's old Voxy cache is recommended when testing the new compatibility path.
-- 光影兼容性取决于 Iris、Sodium、光影包及其他渲染模组的组合。
-  Shader compatibility depends on the combination of Iris, Sodium, the shader pack, and other rendering mods.
-- 修改树叶 LOD 模式会自动重载 Voxy 渲染器，不需要删除世界 LOD 缓存。
-  Changing the leaf LOD mode reloads the Voxy renderer and does not require deleting the world's LOD cache.
-
----
-
-## 上游同步与维护 / Upstream Sync and Maintenance
-
-本项目会定期跟踪并持续合并 Voxy 上游的性能优化、错误修复和架构改进。上游改动会根据 Minecraft 1.21.1、NeoForge 21.1.x 以及本项目已有兼容功能重新适配与测试，而不是直接覆盖分支独有实现。
-
-This project periodically tracks and integrates upstream Voxy performance improvements, bug fixes, and architectural changes. Upstream changes are adapted and reviewed for Minecraft 1.21.1, NeoForge 21.1.x, and this port's existing compatibility work instead of replacing branch-specific implementations wholesale.
-
----
-
-## 构建 / Building
-
-Windows PowerShell：
-Windows PowerShell:
+## 构建
 
 ```powershell
 .\gradlew clean build
 ```
 
-Linux 或 GitHub Actions：
-Linux or GitHub Actions:
+发布文件位于 `build/libs`。1.21.1 使用 Java 21 构建，26.1.2 使用 Java 25 构建。
 
-```bash
-./gradlew clean build
-```
+## 鸣谢与许可
 
-正式发布文件位于 `build/libs`：
-Release files are written to `build/libs`:
+Voxy 由 [MCRcortex](https://github.com/MCRcortex) 创建。感谢 Voxy、Sodium、Iris、NeoForge 及相关模组社区的开发者与测试者。
 
-```text
-neo-voxy-<version>.jar
-```
-
-构建过程可能保留带 `-unoptimized` 后缀的诊断中间包，该文件不应作为正式版本发布。
-
-The build may retain an intermediate JAR with the `-unoptimized` suffix for diagnostics. It should not be distributed.
-
----
-
-## 鸣谢 / Credits
-
-| Project or Contributor | Contribution |
-|---|---|
-| [MCRcortex](https://github.com/MCRcortex) | Original Voxy author |
-| [m3t4f1v3](https://github.com/m3t4f1v3) | Community fork and implementation references |
-| [NHblock714/voxy](https://github.com/NHblock714/voxy) | No-shader water straight-alpha baking, compositing, and fluid-face ordering reference |
-| [yarnobachmann](https://github.com/yarnobachmann) | Earlier NeoForge porting work |
-| Supplement contributors | Lumisene Fluids implementation and ecosystem support |
-| Sodium contributors | Rendering infrastructure and performance work |
-| Iris contributors | Shader integration ecosystem |
-| NeoForge contributors | NeoForge platform and tooling |
-| FakeSight contributors | Extended chunk request concept |
-| Minecraft modding community | Testing, issue reports, and compatibility feedback |
-
-无光影水体处理中的直通 Alpha 烘焙、`SRC_ALPHA` 合成与流体面排序方案，参考并适配自 [NHblock714/voxy](https://github.com/NHblock714/voxy)。
-
-The straight-alpha bake, `SRC_ALPHA` composite, and fluid-face ordering used by the no-shader water path were studied and adapted from [NHblock714/voxy](https://github.com/NHblock714/voxy).
-
-感谢所有原作者、分支维护者、测试者和问题反馈者。
-
-Thanks to all original authors, fork maintainers, testers, and issue reporters.
-
----
-
-## 许可证 / License
-
-请查看 [LICENSE.md](LICENSE.md)。
-
-See [LICENSE.md](LICENSE.md).
+本项目是非官方移植，不代表 Mojang、Microsoft、NeoForge、Sodium、Iris 或 Voxy 原作者。许可证见 [LICENSE.md](LICENSE.md)。

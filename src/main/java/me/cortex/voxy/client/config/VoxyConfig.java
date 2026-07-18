@@ -55,6 +55,9 @@ public class VoxyConfig {
     public boolean dontUseSodiumBuilderThreads = false;
     public int renderPressure = 2;
     public int lodBoundaryBuffer = 1;
+    public boolean enableLodBoundaryFade = true;
+    public int lodBoundaryFadeLength = 16;
+    public int lodBoundaryInset = 8;
     public int earthCurveRatio = 0;
     public boolean enableExtendedRequestDistance = true;
     public int requestDistance = 48;
@@ -150,6 +153,9 @@ public class VoxyConfig {
         this.cloudDistance = Math.clamp(this.cloudDistance, 0, MAX_CLOUD_DISTANCE);
         this.fogIntensity = Math.clamp(this.fogIntensity, 0.0f, 1.0f);
         this.fogDensity = Math.clamp(this.fogDensity, 0.0f, 1.0f);
+        this.lodBoundaryBuffer = Math.clamp(this.lodBoundaryBuffer, 0, 4);
+        this.lodBoundaryFadeLength = Math.clamp(this.lodBoundaryFadeLength, 8, 64);
+        this.lodBoundaryInset = Math.clamp(this.lodBoundaryInset, 8, 32);
         this.setLeafLodMode(this.getLeafLodMode());
         this.farPlayerAnimationDistance = Math.clamp(this.farPlayerAnimationDistance, 0, 32768);
     }

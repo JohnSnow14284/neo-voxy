@@ -221,10 +221,19 @@ void main() {
         return;
     }
 
-    //Check the minimum bounding texture and ensure we are greater than it
-    if (DEPTH_SCALAR_COMPARE(gl_FragCoord.z, texelFetch(depthTex, ivec2(gl_FragCoord.xy), 0).r)) {
-        discard;
-        return;
+    // Opaque terrain uses the exact circular stencil handoff. Translucent
+    // terrain deliberately keeps the old Sodium section mask so water does not
+    // acquire a second, circular boundary on top of vanilla's square edge.
+    #ifdef TRANSLUCENT
+    const bool useChunkBounds = true;
+    #else
+    bool useChunkBounds = circularLodBoundaryEnabled < 0.5;
+    #endif
+    if (useChunkBounds) {
+        if (DEPTH_SCALAR_COMPARE(gl_FragCoord.z, texelFetch(depthTex, ivec2(gl_FragCoord.xy), 0).r)) {
+            discard;
+            return;
+        }
     }
 
 

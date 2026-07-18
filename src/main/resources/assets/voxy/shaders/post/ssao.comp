@@ -256,7 +256,10 @@ void main() {
     if (depth!=NEAR && depth!=FAR) {
         vec4 colour = texture(colourTex, point);
         if (colour == vec4(0.0f, 0.0f, 0.0f, 0.0f)) {
-            ocolour = vec4(1.0f, 0.0f, 0.0f, 1.0f);
+            // A boundary guard may deliberately provide depth while keeping the
+            // LOD colour empty. Preserve transparency so the final composite
+            // falls back to already-rendered vanilla terrain.
+            ocolour = vec4(0.0f);
         } else {
             uint metadata = uint(colour.w*255.0f);
             uint face = metadata&7u;

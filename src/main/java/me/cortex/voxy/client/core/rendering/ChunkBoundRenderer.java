@@ -116,7 +116,11 @@ public class ChunkBoundRenderer {
         long ptr = UploadStream.INSTANCE.upload(this.uniformBuffer, 0, 128);
         long matPtr = ptr; ptr += 4*4*4;
 
-        final float renderDistance = Minecraft.getInstance().options.getEffectiveRenderDistance()*16;//In blocks
+        // This conservative section mask is now used only by translucent LOD
+        // geometry while the circular handoff is active. Keeping it at the real
+        // vanilla distance makes water retain the original section-boundary
+        // ownership instead of combining a square edge with a second circle.
+        final float renderDistance = Minecraft.getInstance().options.getEffectiveRenderDistance() * 16.0f;
 
         {//This is recomputed to be in chunk section space not worldsection
 

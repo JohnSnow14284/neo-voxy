@@ -122,7 +122,8 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
             srcWidth = viewport.width;
             srcHeight = viewport.height;
         }
-        this.initDepthStencil(sourceFramebuffer, this.fb.framebuffer.id, srcWidth, srcHeight, viewport.width, viewport.height);
+        this.initDepthStencil(viewport, sourceFramebuffer, this.fb.framebuffer.id,
+                srcWidth, srcHeight, viewport.width, viewport.height);
         return this.fb.getDepthTex().id;
     }
 
