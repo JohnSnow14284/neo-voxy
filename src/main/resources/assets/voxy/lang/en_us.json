@@ -25,6 +25,15 @@
   "voxy.config.general.renderDistance": "Render distance",
   "voxy.config.general.renderDistance.tooltip": "Render distance of voxy in chunks",
 
+  "voxy.config.general.lodBoundaryFade": "Circular LOD transition",
+  "voxy.config.general.lodBoundaryFade.tooltip": "Replaces whole-section switching with a camera-centred circular handoff. Disable this when the active shader pack already provides its own LOD fade.",
+  "voxy.config.general.lodBoundaryFade.warning": "⚠ Circular LOD fade — disable for Photon-like shaders",
+  "voxy.config.general.lodBoundaryFade.warning.tooltip": "WARNING: If the active shader pack already provides its own LOD fade (for example Photon), this option must be disabled. Enabling both may cause noise, repeated fading, lighting errors, or a visible shadow boundary.",
+  "voxy.config.general.lodBoundaryFadeLength": "LOD transition width",
+  "voxy.config.general.lodBoundaryFadeLength.tooltip": "Width of the ordered-dither handoff band in blocks.",
+  "voxy.config.general.lodBoundaryInset": "LOD transition safety inset",
+  "voxy.config.general.lodBoundaryInset.tooltip": "Keeps loaded vanilla terrain behind the outer transition edge.",
+
   "voxy.config.general.environmental_fog": "Enable environmental fog",
   "voxy.config.general.environmental_fog.tooltip": "Enables or disables voxy rendering environmental fog",
 

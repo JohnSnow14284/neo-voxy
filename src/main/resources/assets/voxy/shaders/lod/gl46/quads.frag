@@ -156,10 +156,18 @@ void main() {
         return;
     }
 
-    //Check the minimum bounding texture and ensure we are greater than it
-    if (DEPTH_SCALAR_COMPARE(gl_FragCoord.z, texelFetch(depthTex, ivec2(gl_FragCoord.xy), 0).r)) {
-        discard;
-        return;
+    // Water keeps the existing section mask; applying a second circular edge
+    // to translucent geometry creates visible colour/depth seams.
+    #ifdef TRANSLUCENT
+    const bool useChunkBounds = true;
+    #else
+    bool useChunkBounds = circularLodBoundaryEnabled < 0.5;
+    #endif
+    if (useChunkBounds) {
+        if (DEPTH_SCALAR_COMPARE(gl_FragCoord.z, texelFetch(depthTex, ivec2(gl_FragCoord.xy), 0).r)) {
+            discard;
+            return;
+        }
     }
 
 
@@ -249,4 +257,3 @@ colour = textureGrad(blockModelAtlas, texPos, dx, dy);
 
 //Undefine the depth stuff
 #import <voxy:util/depthutils.glsl>
-

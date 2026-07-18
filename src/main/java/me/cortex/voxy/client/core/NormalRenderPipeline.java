@@ -5,6 +5,7 @@ import java.util.function.BooleanSupplier;
 import me.cortex.voxy.client.config.VoxyConfig;
 import me.cortex.voxy.client.core.gl.GlFramebuffer;
 import me.cortex.voxy.client.core.gl.GlTexture;
+import me.cortex.voxy.client.core.rendering.LodBoundaryFade;
 import me.cortex.voxy.client.core.rendering.Viewport;
 import me.cortex.voxy.client.core.rendering.hierachical.AsyncNodeManager;
 import me.cortex.voxy.client.core.rendering.hierachical.HierarchicalOcclusionTraverser;
@@ -12,10 +13,12 @@ import me.cortex.voxy.client.core.rendering.hierachical.NodeCleaner;
 import me.cortex.voxy.client.core.rendering.post.FullscreenBlit;
 import me.cortex.voxy.client.core.util.GPUTiming;
 import org.joml.Matrix4f;
+import org.lwjgl.opengl.GL11C;
 import org.lwjgl.opengl.GL30C;
 import org.lwjgl.opengl.GL45C;
 
 public class NormalRenderPipeline extends AbstractRenderPipeline {
+   private static final float[] CLEAR_COLOUR = {0.0F, 0.0F, 0.0F, 0.0F};
    private GlTexture colourTex;
    private GlTexture colourSSAOTex;
    private final GlFramebuffer fbSSAO = new GlFramebuffer();
@@ -57,7 +60,9 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
          GL45C.glTextureParameterf(this.fb.getDepthTex().id, 37098, 6402.0F);
       }
 
-      this.initDepthStencil(sourceDepthTex, this.fb.framebuffer.id, srcWidth, srcHeight, viewport.width, viewport.height);
+      GL45C.glClearNamedFramebufferfv(this.fb.framebuffer.id, GL11C.GL_COLOR, 0, CLEAR_COLOUR);
+      this.initDepthStencil(viewport, sourceDepthTex, this.fb.framebuffer.id,
+         srcWidth, srcHeight, viewport.width, viewport.height);
       return this.fb.getDepthTex().id;
    }
 
@@ -92,9 +97,16 @@ public class NormalRenderPipeline extends AbstractRenderPipeline {
       if (!fogCoversAllRendering) {
          GL30C.glEnable(3042);
          GL30C.glBlendFuncSeparate(770, 771, 1, 771);
+         boolean circularHandoff = LodBoundaryFade.getDistances().enabled();
+         if (circularHandoff) {
+            GL30C.glDepthFunc(GL11C.GL_ALWAYS);
+         }
          AbstractRenderPipeline.transformBlitDepth(
             this.finalBlit, this.fb.getDepthTex().id, outputFramebuffer, viewport, new Matrix4f(viewport.vanillaProjection).mul(viewport.modelView)
          );
+         if (circularHandoff) {
+            GL30C.glDepthFunc(this.properties.closerEqualDepthCompare());
+         }
          GL30C.glDisable(3042);
       } else {
          GL30C.glDisable(2960);

@@ -30,6 +30,9 @@ public class VoxyConfig {
    public float subDivisionSize = 64.0F;
    public boolean useEnvironmentalFog = true;
    public boolean dontUseSodiumBuilderThreads = false;
+   public boolean enableLodBoundaryFade = true;
+   public int lodBoundaryFadeLength = 16;
+   public int lodBoundaryInset = 8;
    public String ssaoMode;
 
    public SSAO.SSAOMode getSSAOMode() {

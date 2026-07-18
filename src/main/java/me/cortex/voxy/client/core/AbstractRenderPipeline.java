@@ -7,6 +7,7 @@ import me.cortex.voxy.client.TimingStatistics;
 import me.cortex.voxy.client.VoxyClient;
 import me.cortex.voxy.client.core.gl.GlFramebuffer;
 import me.cortex.voxy.client.core.model.ModelBakerySubsystem;
+import me.cortex.voxy.client.core.rendering.LodBoundaryFade;
 import me.cortex.voxy.client.core.rendering.Viewport;
 import me.cortex.voxy.client.core.rendering.hierachical.AsyncNodeManager;
 import me.cortex.voxy.client.core.rendering.hierachical.HierarchicalOcclusionTraverser;
@@ -38,6 +39,7 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
    protected final boolean deferTranslucency;
    private static final int DEPTH_SAMPLER = GL42.glGenSamplers();
    private static final long SCRATCH = MemoryUtil.nmemAlloc(64L);
+   private static final Matrix4f INVERSE_MVP = new Matrix4f();
 
    protected AbstractRenderPipeline(
       RenderProperties properties,
@@ -111,7 +113,8 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
       GL30C.glBindFramebuffer(36160, 0);
    }
 
-   protected void initDepthStencil(int sourceDepthTexture, int targetFb, int srcWidth, int srcHeight, int width, int height) {
+   protected void initDepthStencil(Viewport<?> viewport, int sourceDepthTexture, int targetFb,
+                                   int srcWidth, int srcHeight, int width, int height) {
       GL45.glClearNamedFramebufferfi(targetFb, 34041, 0, this.properties.clearDepth(), 1);
       GL30C.glBindFramebuffer(36160, targetFb);
       GL11C.glEnable(2929);
@@ -124,9 +127,29 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
       GL45C.glBindTextureUnit(0, sourceDepthTexture);
       GL42.glBindSampler(0, DEPTH_SAMPLER);
       GL42.glUniform2f(1, (float)width / srcWidth, (float)height / srcHeight);
+
+      LodBoundaryFade.Distances boundary = LodBoundaryFade.getDistances();
+      INVERSE_MVP.set(viewport.vanillaProjection).mul(viewport.modelView).invert().getToAddress(SCRATCH);
+      GL42.nglUniformMatrix4fv(2, 1, false, SCRATCH);
+      GL42.glUniform1f(6, boundary.fadeStart());
+      GL42.glUniform1f(7, boundary.fadeEnd());
+      GL42.glUniform1i(10, 0);
       GL42.glDepthMask(true);
       GL11C.glColorMask(false, false, false, false);
       this.depthStencilSetup.blit();
+
+      if (boundary.enabled()) {
+         // Preserve conservative vanilla depth only for transition pixels.
+         // This prevents a missing/coarser LOD sample from exposing caves.
+         GL11C.glStencilMask(0);
+         GL42.glUniform1i(10, 1);
+         viewport.MVP.getToAddress(SCRATCH);
+         GL42.nglUniformMatrix4fv(11, 1, false, SCRATCH);
+         this.depthStencilSetup.blit();
+         GL42.glUniform1i(10, 0);
+         GL11C.glStencilMask(255);
+      }
+
       GL42.glDepthFunc(this.properties.closerEqualDepthCompare());
       GL11C.glColorMask(true, true, true, true);
       GL11C.glStencilOp(7680, 7680, 7680);

@@ -1,0 +1,23 @@
+{
+  "voxy.config.title": "Voxy",
+  "voxy.config.general": "常规",
+  "voxy.config.rendering": "渲染",
+  "voxy.config.general.enabled": "启用 Voxy",
+  "voxy.config.general.serviceThreads": "服务线程",
+  "voxy.config.general.useSodiumBuilder": "使用 Sodium 线程",
+  "voxy.config.general.ingest": "区块数据摄取",
+  "voxy.config.general.rendering": "Voxy 渲染",
+  "voxy.config.general.subDivisionSize": "细分像素面积",
+  "voxy.config.general.renderDistance": "渲染距离",
+  "voxy.config.general.lodBoundaryFade": "圆形 LOD 淡入",
+  "voxy.config.general.lodBoundaryFade.tooltip": "以玩家为中心平滑交接原版地形与 LOD。若光影已自带 LOD 淡入（例如 Photon），请关闭此功能。",
+  "voxy.config.general.lodBoundaryFade.warning": "⚠ 圆形 LOD 淡入——Photon 等光影必须关闭",
+  "voxy.config.general.lodBoundaryFade.warning.tooltip": "警告：若当前光影已自带 LOD 淡入（例如 Photon），必须关闭本选项。同时启用可能产生噪点、重复过渡、光照异常或明显的阴影边界。",
+  "voxy.config.general.lodBoundaryFadeLength": "LOD 过渡宽度",
+  "voxy.config.general.lodBoundaryFadeLength.tooltip": "有序抖动交接带的宽度，单位为方块。",
+  "voxy.config.general.lodBoundaryInset": "LOD 过渡安全内缩",
+  "voxy.config.general.lodBoundaryInset.tooltip": "在过渡外沿后方保留已加载的原版地形。",
+  "voxy.config.general.environmental_fog": "启用环境雾",
+  "voxy.config.general.render_fog": "启用渲染雾",
+  "voxy.config.general.ssao_mode": "SSAO 模式"
+}

@@ -15,6 +15,7 @@ import net.caffeinemc.mods.sodium.api.config.option.OptionImpact;
 import net.caffeinemc.mods.sodium.api.config.option.Range;
 import net.caffeinemc.mods.sodium.api.config.structure.ConfigBuilder;
 import net.caffeinemc.mods.sodium.api.config.structure.ModOptionsBuilder;
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
@@ -63,8 +64,8 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                         .setPostChangeFlags(RENDER_RELOAD, "voxy:iris_reload")
                         .setEnabler(null)
                   ),
-                  new SodiumConfigBuilder.Group(
-                     new SodiumConfigBuilder.IntOption(
+                   new SodiumConfigBuilder.Group(
+                      new SodiumConfigBuilder.IntOption(
                            "voxy:thread_count",
                            Component.translatable("voxy.config.general.serviceThreads"),
                            () -> CFG.serviceThreads,
@@ -130,7 +131,37 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                               vrs.setRenderDistance(CFG.sectionRenderDistance);
                            }
                         }, "voxy:rendering", RENDER_RELOAD)
-                        .setImpact(OptionImpact.MEDIUM)
+                         .setImpact(OptionImpact.MEDIUM)
+                   ),
+                  new SodiumConfigBuilder.Group(
+                     new SodiumConfigBuilder.BoolOption(
+                           "voxy:lod_boundary_fade",
+                           Component.translatable("voxy.config.general.lodBoundaryFade.warning")
+                              .withStyle(ChatFormatting.RED, ChatFormatting.BOLD),
+                           () -> CFG.enableLodBoundaryFade,
+                           v -> CFG.enableLodBoundaryFade = v
+                        )
+                        .setImpact(OptionImpact.LOW),
+                     new SodiumConfigBuilder.IntOption(
+                           "voxy:lod_boundary_fade_length",
+                           Component.translatable("voxy.config.general.lodBoundaryFadeLength"),
+                           () -> CFG.lodBoundaryFadeLength,
+                           v -> CFG.lodBoundaryFadeLength = v,
+                           new Range(8, 64, 1)
+                        )
+                        .setFormatter(v -> Component.literal(v + " blocks"))
+                        .setEnabler("voxy:lod_boundary_fade")
+                        .setImpact(OptionImpact.LOW),
+                     new SodiumConfigBuilder.IntOption(
+                           "voxy:lod_boundary_inset",
+                           Component.translatable("voxy.config.general.lodBoundaryInset"),
+                           () -> CFG.lodBoundaryInset,
+                           v -> CFG.lodBoundaryInset = v,
+                           new Range(8, 32, 1)
+                        )
+                        .setFormatter(v -> Component.literal(v + " blocks"))
+                        .setEnabler("voxy:lod_boundary_fade")
+                        .setImpact(OptionImpact.LOW)
                   ),
                   new SodiumConfigBuilder.Group(
                         new SodiumConfigBuilder.BoolOption(

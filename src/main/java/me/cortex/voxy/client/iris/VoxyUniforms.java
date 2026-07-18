@@ -4,6 +4,7 @@ import java.util.function.Supplier;
 import me.cortex.voxy.client.config.VoxyConfig;
 import me.cortex.voxy.client.core.IVoxyRenderSystemHolder;
 import me.cortex.voxy.client.core.VoxyRenderSystem;
+import me.cortex.voxy.client.core.rendering.LodBoundaryFade;
 import net.irisshaders.iris.gl.uniform.UniformHolder;
 import net.irisshaders.iris.gl.uniform.UniformUpdateFrequency;
 import org.joml.Matrix4f;
@@ -32,6 +33,8 @@ public class VoxyUniforms {
 
    public static void addUniforms(UniformHolder uniforms) {
       uniforms.uniform1i(UniformUpdateFrequency.PER_FRAME, "vxRenderDistance", () -> Math.round(VoxyConfig.CONFIG.sectionRenderDistance * 32.0F))
+         .uniform1f(UniformUpdateFrequency.PER_FRAME, "voxyLodBoundaryFadeStart", () -> LodBoundaryFade.getDistances().fadeStart())
+         .uniform1f(UniformUpdateFrequency.PER_FRAME, "voxyLodBoundaryFadeEnd", () -> LodBoundaryFade.getDistances().fadeEnd())
          .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "vxViewProj", VoxyUniforms::getViewProjection)
          .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "vxViewProjInv", new VoxyUniforms.Inverted(VoxyUniforms::getViewProjection))
          .uniformMatrix(UniformUpdateFrequency.PER_FRAME, "vxViewProjPrev", new VoxyUniforms.PreviousMat(VoxyUniforms::getViewProjection))
