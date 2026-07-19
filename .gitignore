@@ -1,0 +1,29 @@
+# Project exclude paths
+/.gradle/
+/.idea/
+/build/
+/run/
+/out/
+/logs/
+
+bin/
+.classpath
+.project
+*.launch
+.settings/
+
+.vscode/
+
+# compile-only third-party jars, drop them in yourself (see README)
+/libs/
+
+# local workspace notes
+/ARCHITECTURE.md
+/HANDOFF.md
+/VOXY-0216-PROGRESS.md
+/VOXY-0216-REBASE-PLAN.md
+/VOXY-OPTIMIZATION-AUDIT.md
+/FRAME-COST-AUDIT.md
+/BIG-ITEMS-PLAN.md
+/PRE-PUSH-AUDIT.md
+/UPSTREAM-MERGE-PLAN.md

@@ -1,0 +1,103 @@
+package me.cortex.voxy.client.mixin.minecraft;
+
+import me.cortex.voxy.client.config.VoxyConfig;
+import me.cortex.voxy.common.world.service.VoxelIngestService;
+import me.cortex.voxy.commonImpl.VoxyCommon;
+import me.cortex.voxy.commonImpl.VoxyInstance;
+import me.cortex.voxy.commonImpl.WorldIdentifier;
+import me.cortex.voxy.commonImpl.compat.DomumOrnamentumCompat;
+import net.minecraft.client.multiplayer.ClientChunkCache;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.SectionPos;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.util.profiling.ProfilerFiller;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.dimension.DimensionType;
+
+import java.util.function.Supplier;
+
+import org.spongepowered.asm.mixin.Final;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+@Mixin(ClientLevel.class)
+public abstract class MixinClientLevel {
+
+    @Unique
+    private int bottomSectionY;
+
+    @Shadow @Final public LevelRenderer levelRenderer;
+
+    @Shadow public abstract ClientChunkCache getChunkSource();
+
+    @Inject(method = "<init>", at = @At("TAIL"))
+    private void voxy$getBottom(
+            ClientPacketListener networkHandler,
+            ClientLevel.ClientLevelData properties,
+            ResourceKey<Level> registryRef,
+            Holder<DimensionType> dimensionType,
+            int loadDistance,
+            int simulationDistance,
+            Supplier<ProfilerFiller> profiler,
+            LevelRenderer worldRenderer,
+            boolean debugWorld,
+            long seed,
+            CallbackInfo cir) {
+        this.bottomSectionY = ((Level)(Object)this).getMinBuildHeight()>>4;
+    }
+
+    @Inject(method = "setBlocksDirty", at = @At("TAIL"))
+    private void voxy$injectIngestOnStateChange(BlockPos pos, BlockState old, BlockState updated, CallbackInfo cir) {
+        if (old == updated) return;
+
+        //Domum Ornamentum asks for a model-data rebuild by calling setBlocksDirty(pos, AIR, state) - the
+        //block itself never changes, only the materials stored on its block entity. That is invisible to
+        //both tests below (the state is not air, and the block need not sit on a section border), so
+        //without this a colonist re-texturing a Domum block leaves the LOD showing the old materials
+        //forever. Catch the notification instead of polling block entities every tick.
+        boolean domumUpdate = DomumOrnamentumCompat.isDomumState(old)
+                || DomumOrnamentumCompat.isDomumState(updated);
+
+        //TODO: is this _really_ needed, we should have enough processing power to not need todo it if its only a
+        // block removal
+        if (!domumUpdate && !updated.isAir()) return;
+        if (VoxyCommon.getInstance()==null) return;
+        if (!VoxyConfig.CONFIG.ingestEnabled) return;//Only ingest if setting enabled
+
+        var self = (Level)(Object)this;
+        var wi = WorldIdentifier.of(self);
+        if (wi == null) {
+            return;
+        }
+
+        int x = pos.getX()&15;
+        int y = pos.getY()&15;
+        int z = pos.getZ()&15;
+        if (domumUpdate || x == 0 || x==15 || y==0 || y==15 || z==0||z==15) {//Update if there is a statechange on the boarder
+            var csp = SectionPos.of(pos);
+            //Is not using voxy$cheekyGetChunk as dont think is need
+            var chunk = self.getChunk(pos.getX()>>4, pos.getZ()>>4, ChunkStatus.FULL, false);
+            if (chunk instanceof LevelChunk levelChunk) {
+                var section = levelChunk.getSection(csp.y() - this.bottomSectionY);
+                var lp = self.getLightEngine();
+
+                var blp = lp.getLayerListener(LightLayer.BLOCK).getDataLayerData(csp);
+                var slp = lp.getLayerListener(LightLayer.SKY).getDataLayerData(csp);
+
+                VoxelIngestService.rawIngest(wi, levelChunk, section, csp.x(), csp.y(), csp.z(), blp == null ? null : blp.copy(), slp == null ? null : slp.copy());
+            }
+        }
+    }
+}

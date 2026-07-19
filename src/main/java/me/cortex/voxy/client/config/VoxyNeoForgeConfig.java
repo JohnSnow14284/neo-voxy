@@ -1,0 +1,301 @@
+package me.cortex.voxy.client.config;
+
+import me.cortex.voxy.client.RenderStatistics;
+import me.cortex.voxy.compat.far.FarEntityClient;
+import me.cortex.voxy.common.util.cpu.CpuLayout;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.event.config.ModConfigEvent;
+import net.neoforged.neoforge.common.ModConfigSpec;
+
+/**
+ * NeoForge config integration for Voxy.
+ * Provides a built-in config screen accessible from the Mods menu.
+ *
+ * This wraps the existing VoxyConfig and syncs values between the two systems.
+ */
+@EventBusSubscriber(modid = "voxy", bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
+public class VoxyNeoForgeConfig {
+
+    private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
+
+    private static final ModConfigSpec.BooleanValue ENABLED = BUILDER
+            .comment("Enable Voxy LOD rendering system")
+            .define("enabled", true);
+
+    private static final ModConfigSpec.BooleanValue ENABLE_RENDERING = BUILDER
+            .comment("Enable LOD terrain rendering (can be disabled while keeping data ingestion)")
+            .define("enableRendering", true);
+
+    private static final ModConfigSpec.BooleanValue INGEST_ENABLED = BUILDER
+            .comment("Enable automatic chunk data ingestion for LOD generation")
+            .define("ingestEnabled", true);
+
+    private static final ModConfigSpec.IntValue SECTION_RENDER_DISTANCE = BUILDER
+            .comment("LOD section render distance (multiplied by 32 for actual chunk distance)",
+                     "Example: 16 = 512 chunks render distance")
+            .defineInRange("sectionRenderDistance", 16, 2, 64);
+
+    private static final ModConfigSpec.IntValue SERVICE_THREADS = BUILDER
+            .comment("Number of background threads for LOD processing",
+                     "Default is based on CPU core count.")
+            .defineInRange("serviceThreads", Math.max((int) (CpuLayout.getCoreCount() / 1.5), 1), 1, CpuLayout.getCoreCount());
+
+    private static final ModConfigSpec.DoubleValue SUB_DIVISION_SIZE = BUILDER
+            .comment("Subdivision size for LOD rendering (28-256)",
+                     "Lower = more detailed LODs but more GPU load")
+            .defineInRange("subDivisionSize", 63.0, 28.0, 256.0);
+
+    private static final ModConfigSpec.BooleanValue USE_ENVIRONMENTAL_FOG = BUILDER
+            .comment("Apply environmental fog to LOD terrain")
+            .define("useEnvironmentalFog", true);
+
+    private static final ModConfigSpec.BooleanValue DONT_USE_SODIUM_BUILDER_THREADS = BUILDER
+            .comment("Don't share threads with Sodium's chunk builder")
+            .define("dontUseSodiumBuilderThreads", false);
+
+    private static final ModConfigSpec.IntValue LOD_BOUNDARY_BUFFER = BUILDER
+            .comment("LOD boundary safety overlap in blocks")
+            .defineInRange("lodBoundaryBuffer", 1, 0, 4);
+
+    private static final ModConfigSpec.BooleanValue ENABLE_LOD_BOUNDARY_FADE = BUILDER
+            .comment("Use a camera-centred circular handoff between vanilla terrain and Voxy LOD.",
+                     "Disable this when the active shader pack already supplies an LOD fade (for example Photon).")
+            .define("enableLodBoundaryFade", true);
+
+    private static final ModConfigSpec.IntValue LOD_BOUNDARY_FADE_LENGTH = BUILDER
+            .comment("Width of the stable dithered terrain handoff, in blocks")
+            .defineInRange("lodBoundaryFadeLength", 16, 8, 64);
+
+    private static final ModConfigSpec.IntValue LOD_BOUNDARY_INSET = BUILDER
+            .comment("Safety distance between the handoff outer edge and vanilla render distance, in blocks")
+            .defineInRange("lodBoundaryInset", 8, 8, 32);
+
+    private static final ModConfigSpec.BooleanValue ENABLE_EXTENDED_REQUEST_DISTANCE = BUILDER
+            .comment("Enable FakeSight-style extended chunk requests for Voxy ingestion")
+            .define("enableExtendedRequestDistance", true);
+
+    private static final ModConfigSpec.BooleanValue FOLLOW_LOD_REQUEST_DISTANCE = BUILDER
+            .comment("Follow Voxy's LOD radius for chunk requests, capped by the vanilla protocol at 127 chunks")
+            .define("followLodRequestDistance", true);
+
+    private static final ModConfigSpec.IntValue REQUEST_DISTANCE = BUILDER
+            .comment("Requested chunk radius when followLodRequestDistance is disabled.",
+                     "Large values increase CPU, memory and world-generation load.")
+            .defineInRange("requestDistance", 48,
+                    VoxyConfig.MIN_REQUEST_DISTANCE, VoxyConfig.MAX_REQUEST_DISTANCE);
+
+    private static final ModConfigSpec.IntValue EARTH_CURVE_RATIO = BUILDER
+            .comment("World curvature effect - simulates standing on a spherical planet",
+                     "0 = disabled (flat world)",
+                     "1 = real Earth curvature (6371km radius)",
+                     "Higher values = more extreme curvature (smaller planet effect)",
+                     "Valid range: 0 (off), or 50-5000. Values 1-49 are auto-corrected to 50.",
+                     "Inspired by Distant Horizons' earth curvature feature")
+            .defineInRange("earthCurveRatio", 0, 0, 5000);
+
+    private static final ModConfigSpec.BooleanValue ENABLE_FAR_PLAYER_RENDERING = BUILDER
+            .comment("Render far players with lightweight server snapshots.",
+                     "Multiplayer requires Voxy on the server; standalone SeeU takes precedence when installed.")
+            .define("enableFarPlayerRendering", true);
+
+    private static final ModConfigSpec.BooleanValue ENABLE_FAR_VEHICLE_RENDERING = BUILDER
+            .comment("Render ridden vehicles and mounts from far-entity snapshots independently of players.")
+            .define("enableFarVehicleRendering", true);
+
+    private static final ModConfigSpec.BooleanValue RENDER_FAR_PLAYER_NAMES = BUILDER
+            .comment("Render name tags above far-player proxies.")
+            .define("renderFarPlayerNames", true);
+
+    private static final ModConfigSpec.IntValue FAR_PLAYER_ANIMATION_DISTANCE = BUILDER
+            .comment("Maximum distance in blocks for far-player walk animation.",
+                     "Set to 0 to keep far proxies static and reduce CPU cost.")
+            .defineInRange("farPlayerAnimationDistance", 1024, 0, 32768);
+
+    private static final ModConfigSpec.BooleanValue SHARE_FAR_PLAYER_POSITION = BUILDER
+            .comment("Allow other Voxy clients on the same server to receive your far-player snapshot.")
+            .define("shareFarPlayerPosition", true);
+
+    private static final ModConfigSpec.BooleanValue RENDER_STATISTICS = BUILDER
+            .comment("Show render statistics in F3 debug screen",
+                     "Displays LOD traversal counts, visible sections, and quad counts")
+            .define("renderStatistics", false);
+
+    // Create mod integration: render distant trains/tracks/contraptions and cull placed kinetic parts.
+    // The *MaxChunks caps are in chunks; 0 = follow voxy's LOD radius (2 * sectionRenderDistance chunks).
+    // Lowering a cap renders that integration nearer to save GPU; the train cap also shrinks the
+    // server's pose-stream window on the integrated server (less bandwidth).
+    private static final ModConfigSpec.BooleanValue DISTANT_TRAINS = BUILDER
+            .comment("Render Create trains beyond the vanilla view distance, in the LOD")
+            .define("distantTrains", true);
+
+    private static final ModConfigSpec.IntValue DISTANT_TRAIN_MAX_CHUNKS = BUILDER
+            .comment("Max distance to render distant trains, in chunks. 0 = follow the LOD radius.",
+                     "Lower renders trains nearer; on the integrated server it also shrinks the",
+                     "server's train pose-stream window, cutting bandwidth.")
+            .defineInRange("distantTrainMaxChunks", 0, 0, 192);
+
+    private static final ModConfigSpec.BooleanValue DISTANT_TRACKS = BUILDER
+            .comment("Render the Create track network beyond the view distance, in the LOD")
+            .define("distantTracks", true);
+
+    private static final ModConfigSpec.IntValue DISTANT_TRACK_MAX_CHUNKS = BUILDER
+            .comment("Max distance to render the distant track network, in chunks. 0 = follow the LOD radius.")
+            .defineInRange("distantTrackMaxChunks", 0, 0, 192);
+
+    private static final ModConfigSpec.BooleanValue DISTANT_CONTRAPTIONS = BUILDER
+            .comment("Render snapshots of Create contraptions (bearings/pistons/gantries/mounted)",
+                     "beyond the view distance, in the LOD")
+            .define("distantContraptions", true);
+
+    private static final ModConfigSpec.IntValue DISTANT_CONTRAPTION_MAX_CHUNKS = BUILDER
+            .comment("Max distance to render distant contraptions, in chunks. 0 = follow the LOD radius.")
+            .defineInRange("distantContraptionMaxChunks", 0, 0, 192);
+
+    private static final ModConfigSpec.BooleanValue DISTANT_KINETICS = BUILDER
+            .comment("Cull placed kinetic machine moving parts (rotating shafts/gears) beyond the render",
+                     "distance so they stop floating over the LOD. Off = Create draws them natively.")
+            .define("distantKinetics", true);
+
+    public static final ModConfigSpec SPEC = BUILDER.build();
+
+    private VoxyNeoForgeConfig() {
+    }
+
+    public static void register(ModContainer container) {
+        container.registerConfig(ModConfig.Type.CLIENT, SPEC, "voxy-client.toml");
+    }
+
+    private static void syncToVoxyConfig() {
+        VoxyConfig.CONFIG.enabled = ENABLED.get();
+        VoxyConfig.CONFIG.enableRendering = ENABLE_RENDERING.get();
+        VoxyConfig.CONFIG.ingestEnabled = INGEST_ENABLED.get();
+        VoxyConfig.CONFIG.sectionRenderDistance = SECTION_RENDER_DISTANCE.get();
+        VoxyConfig.CONFIG.serviceThreads = SERVICE_THREADS.get();
+        VoxyConfig.CONFIG.subDivisionSize = SUB_DIVISION_SIZE.get().floatValue();
+        VoxyConfig.CONFIG.useEnvironmentalFog = USE_ENVIRONMENTAL_FOG.get();
+        VoxyConfig.CONFIG.dontUseSodiumBuilderThreads = DONT_USE_SODIUM_BUILDER_THREADS.get();
+        VoxyConfig.CONFIG.lodBoundaryBuffer = LOD_BOUNDARY_BUFFER.get();
+        VoxyConfig.CONFIG.enableLodBoundaryFade = ENABLE_LOD_BOUNDARY_FADE.get();
+        VoxyConfig.CONFIG.lodBoundaryFadeLength = LOD_BOUNDARY_FADE_LENGTH.get();
+        VoxyConfig.CONFIG.lodBoundaryInset = LOD_BOUNDARY_INSET.get();
+        VoxyConfig.CONFIG.enableExtendedRequestDistance = ENABLE_EXTENDED_REQUEST_DISTANCE.get();
+        VoxyConfig.CONFIG.followLodRequestDistance = FOLLOW_LOD_REQUEST_DISTANCE.get();
+        VoxyConfig.CONFIG.requestDistance = REQUEST_DISTANCE.get();
+        VoxyConfig.CONFIG.earthCurveRatio = EARTH_CURVE_RATIO.get();
+        // Create integration
+        VoxyConfig.CONFIG.distantTrains = DISTANT_TRAINS.get();
+        VoxyConfig.CONFIG.distantTrainMaxChunks = DISTANT_TRAIN_MAX_CHUNKS.get();
+        VoxyConfig.CONFIG.distantTracks = DISTANT_TRACKS.get();
+        VoxyConfig.CONFIG.distantTrackMaxChunks = DISTANT_TRACK_MAX_CHUNKS.get();
+        VoxyConfig.CONFIG.distantContraptions = DISTANT_CONTRAPTIONS.get();
+        VoxyConfig.CONFIG.distantContraptionMaxChunks = DISTANT_CONTRAPTION_MAX_CHUNKS.get();
+        VoxyConfig.CONFIG.distantKinetics = DISTANT_KINETICS.get();
+        VoxyConfig.CONFIG.enableFarPlayerRendering = ENABLE_FAR_PLAYER_RENDERING.get();
+        VoxyConfig.CONFIG.enableFarVehicleRendering = ENABLE_FAR_VEHICLE_RENDERING.get();
+        VoxyConfig.CONFIG.renderFarPlayerNames = RENDER_FAR_PLAYER_NAMES.get();
+        VoxyConfig.CONFIG.farPlayerAnimationDistance = FAR_PLAYER_ANIMATION_DISTANCE.get();
+        VoxyConfig.CONFIG.shareFarPlayerPosition = SHARE_FAR_PLAYER_POSITION.get();
+        VoxyConfig.CONFIG.sanitize();
+        // RenderStatistics is a runtime-only setting (not saved to JSON)
+        RenderStatistics.enabled = RENDER_STATISTICS.get();
+
+        // Also save to the JSON config for compatibility (this also pushes the distant-train render
+        // distance to the server-side sampler bridge via VoxyConfig.syncDistantTrainConfig).
+        VoxyConfig.CONFIG.save();
+    }
+
+    private static void syncFromVoxyConfig() {
+        VoxyConfig.CONFIG.sanitize();
+        ENABLED.set(VoxyConfig.CONFIG.enabled);
+        ENABLE_RENDERING.set(VoxyConfig.CONFIG.enableRendering);
+        INGEST_ENABLED.set(VoxyConfig.CONFIG.ingestEnabled);
+        SECTION_RENDER_DISTANCE.set((int) VoxyConfig.CONFIG.sectionRenderDistance);
+        SERVICE_THREADS.set(VoxyConfig.CONFIG.serviceThreads);
+        SUB_DIVISION_SIZE.set((double) VoxyConfig.CONFIG.subDivisionSize);
+        USE_ENVIRONMENTAL_FOG.set(VoxyConfig.CONFIG.useEnvironmentalFog);
+        DONT_USE_SODIUM_BUILDER_THREADS.set(VoxyConfig.CONFIG.dontUseSodiumBuilderThreads);
+        LOD_BOUNDARY_BUFFER.set(VoxyConfig.CONFIG.lodBoundaryBuffer);
+        ENABLE_LOD_BOUNDARY_FADE.set(VoxyConfig.CONFIG.enableLodBoundaryFade);
+        LOD_BOUNDARY_FADE_LENGTH.set(VoxyConfig.CONFIG.lodBoundaryFadeLength);
+        LOD_BOUNDARY_INSET.set(VoxyConfig.CONFIG.lodBoundaryInset);
+        ENABLE_EXTENDED_REQUEST_DISTANCE.set(VoxyConfig.CONFIG.enableExtendedRequestDistance);
+        FOLLOW_LOD_REQUEST_DISTANCE.set(VoxyConfig.CONFIG.followLodRequestDistance);
+        REQUEST_DISTANCE.set(VoxyConfig.CONFIG.requestDistance);
+        EARTH_CURVE_RATIO.set(VoxyConfig.CONFIG.earthCurveRatio);
+        // Create integration
+        DISTANT_TRAINS.set(VoxyConfig.CONFIG.distantTrains);
+        DISTANT_TRAIN_MAX_CHUNKS.set(VoxyConfig.CONFIG.distantTrainMaxChunks);
+        DISTANT_TRACKS.set(VoxyConfig.CONFIG.distantTracks);
+        DISTANT_TRACK_MAX_CHUNKS.set(VoxyConfig.CONFIG.distantTrackMaxChunks);
+        DISTANT_CONTRAPTIONS.set(VoxyConfig.CONFIG.distantContraptions);
+        DISTANT_CONTRAPTION_MAX_CHUNKS.set(VoxyConfig.CONFIG.distantContraptionMaxChunks);
+        DISTANT_KINETICS.set(VoxyConfig.CONFIG.distantKinetics);
+        ENABLE_FAR_PLAYER_RENDERING.set(VoxyConfig.CONFIG.enableFarPlayerRendering);
+        ENABLE_FAR_VEHICLE_RENDERING.set(VoxyConfig.CONFIG.enableFarVehicleRendering);
+        RENDER_FAR_PLAYER_NAMES.set(VoxyConfig.CONFIG.renderFarPlayerNames);
+        FAR_PLAYER_ANIMATION_DISTANCE.set(VoxyConfig.CONFIG.farPlayerAnimationDistance);
+        SHARE_FAR_PLAYER_POSITION.set(VoxyConfig.CONFIG.shareFarPlayerPosition);
+        // RenderStatistics remains NeoForge/TOML-only.
+        RenderStatistics.enabled = RENDER_STATISTICS.get();
+    }
+
+    @SubscribeEvent
+    public static void onConfigLoad(ModConfigEvent.Loading event) {
+        if (event.getConfig().getSpec() == SPEC) {
+            syncFromVoxyConfig();
+        }
+    }
+
+    @SubscribeEvent
+    public static void onConfigReload(ModConfigEvent.Reloading event) {
+        if (event.getConfig().getSpec() == SPEC) {
+            syncToVoxyConfig();
+            FarEntityClient.sendHello();
+        }
+    }
+
+    // Getters for direct access (optional, can use VoxyConfig.CONFIG instead)
+    public static boolean isEnabled() {
+        return ENABLED.get();
+    }
+
+    public static boolean isRenderingEnabled() {
+        return ENABLE_RENDERING.get();
+    }
+
+    public static boolean isIngestEnabled() {
+        return INGEST_ENABLED.get();
+    }
+
+    public static int getSectionRenderDistance() {
+        return SECTION_RENDER_DISTANCE.get();
+    }
+
+    public static int getServiceThreads() {
+        return SERVICE_THREADS.get();
+    }
+
+    public static float getSubDivisionSize() {
+        return SUB_DIVISION_SIZE.get().floatValue();
+    }
+
+    public static boolean useEnvironmentalFog() {
+        return USE_ENVIRONMENTAL_FOG.get();
+    }
+
+    public static boolean dontUseSodiumBuilderThreads() {
+        return DONT_USE_SODIUM_BUILDER_THREADS.get();
+    }
+
+    public static boolean isRenderStatisticsEnabled() {
+        return RENDER_STATISTICS.get();
+    }
+
+    public static int getEarthCurveRatio() {
+        return EARTH_CURVE_RATIO.get();
+    }
+}

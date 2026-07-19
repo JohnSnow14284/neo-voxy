@@ -1,0 +1,23 @@
+{
+  "required": false,
+  "package": "me.cortex.voxy.client.mixin",
+  "plugin": "me.cortex.voxy.client.mixin.IrisVoxyMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "iris.CustomUniformsAccessor",
+    "iris.IrisRenderingPipelineAccessor",
+    "iris.MixinIris",
+    "iris.MixinIrisRenderingPipeline",
+    "iris.MixinIrisSamplers",
+    "iris.MixinLevelRenderer",
+    "iris.MixinMatrixUniforms",
+    "iris.MixinPackRenderTargetDirectives",
+    "iris.MixinProgramSet",
+    "iris.MixinShaderPackSourceNames",
+    "iris.MixinSodiumShadowBoundary",
+    "iris.MixinStandardMacros"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
