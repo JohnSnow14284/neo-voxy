@@ -83,9 +83,9 @@ Neo-Voxy 为远距离地形提供高性能 LOD 渲染，并针对 NeoForge、Sod
 `build/libs/neo-voxy-0.3.1-slim.jar`，不再需要 Python 或 `tools` 目录。该发布包仅保留
 Windows/Linux x86_64 原生库；未带 `-slim` 的大体积 JAR 仅用于构建检查。
 
-1.21.1 的 Create、Sable、EclipticSeasons 等源码联动需要在 `libs/aero-spike` 中提供
-对应的编译期 API JAR。依赖只用于编译，不会让这些模组变成运行时强制前置；缺失时 Gradle
-会列出所需的准确文件名。
+Create、Sable、EclipticSeasons 等联动所需的公开编译依赖由 Gradle 自动下载。Create 内嵌的
+Ponder/Flywheel 以及 Sable 内嵌的 companion/Rapier 也会自动提取，因此全新检出和 CI 均不需要
+手工维护 `libs/aero-spike`。这些依赖只用于编译，不会让对应模组变成运行时强制前置。
 
 ## English
 
@@ -159,9 +159,10 @@ creates `build/libs/neo-voxy-0.3.1-slim.jar`; Python and the `tools` directory a
 The release JAR keeps only Windows/Linux x86_64 natives. The large JAR without `-slim` is retained
 only as an intermediate build artifact.
 
-The 1.21.1 source integrations for Create, Sable, and EclipticSeasons require their compile-time API
-JARs under `libs/aero-spike`. They remain optional at runtime. If a file is missing, Gradle reports
-the exact expected filename.
+Gradle automatically downloads the public compile-time dependencies required by the Create, Sable,
+EclipticSeasons, and other integrations. It also extracts Create's embedded Ponder/Flywheel and
+Sable's embedded companion/Rapier jars, so fresh clones and CI do not need a manually populated
+`libs/aero-spike` directory. These integrations remain optional at runtime.
 
 ## Credits and license
 
