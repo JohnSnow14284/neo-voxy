@@ -1,0 +1,51 @@
+name: Build Minecraft Mod (NeoForge)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ 1211, 2612, Merge1.21.1neo ]
+  pull_request:
+    branches: [ 1211, 2612, Merge1.21.1neo ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Grant execute permission for Gradle wrapper
+        run: |
+          chmod +x ./gradlew
+          ls -la ./gradlew
+
+      - name: Build mod with Gradle
+        run: bash ./gradlew -I init.gradle build --no-daemon
+
+      - name: List generated JARs
+        run: |
+          echo "=== JAR files in build/libs ==="
+          ls -la build/libs/ || echo "build/libs/ directory not found"
+          echo "=== All JAR files in workspace ==="
+          find . -name "*.jar" -type f
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: neo-voxy
+          path: |
+            build/libs/neo-voxy-*.jar
+            !build/libs/*-unoptimized.jar
+          if-no-files-found: error
