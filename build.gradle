@@ -258,6 +258,132 @@ jar {
     }
 }
 
+// Build the distributable JAR without an external Python post-processing step. NeoForge requires
+// nested jarjar archives to remain STORED, so this task rewrites the outer archive explicitly while
+// trimming native libraries that cannot run on the two supported desktop targets (Windows/Linux
+// x86_64). It also removes the Java-9 module descriptors from the two LWJGL extension jars: on a
+// dedicated server those descriptors require the client-only org.lwjgl module before FML can start.
+def slimJarOutput = layout.buildDirectory.file(
+        "libs/${project.archives_base_name}-${project.version}-slim.jar")
+
+tasks.register('slimJar') {
+    group = 'build'
+    description = 'Creates the trimmed Windows/Linux distributable JAR without external tools'
+    dependsOn tasks.named('jar')
+
+    def sourceJar = tasks.named('jar').flatMap { it.archiveFile }
+    inputs.file(sourceJar)
+    outputs.file(slimJarOutput)
+
+    doLast {
+        def source = sourceJar.get().asFile
+        def target = slimJarOutput.get().asFile
+        target.parentFile.mkdirs()
+
+        def putEntry
+        putEntry = { java.util.zip.ZipOutputStream output, String name, byte[] data,
+                     int requestedMethod, long timestamp ->
+            def entry = new java.util.zip.ZipEntry(name)
+            if (timestamp >= 0L) entry.time = timestamp
+            int method = requestedMethod == java.util.zip.ZipEntry.STORED
+                    ? java.util.zip.ZipEntry.STORED : java.util.zip.ZipEntry.DEFLATED
+            entry.method = method
+            if (method == java.util.zip.ZipEntry.STORED) {
+                def crc = new java.util.zip.CRC32()
+                crc.update(data)
+                entry.size = data.length
+                entry.compressedSize = data.length
+                entry.crc = crc.value
+            }
+            output.putNextEntry(entry)
+            if (data.length != 0) output.write(data)
+            output.closeEntry()
+        }
+
+        def rewriteNested = { byte[] inputBytes, Closure<Boolean> shouldDrop, String label ->
+            def bytesOut = new ByteArrayOutputStream(inputBytes.length)
+            int removed = 0
+            new java.util.zip.ZipInputStream(new ByteArrayInputStream(inputBytes)).withCloseable { input ->
+                new java.util.zip.ZipOutputStream(bytesOut).withCloseable { output ->
+                    java.util.zip.ZipEntry entry
+                    while ((entry = input.nextEntry) != null) {
+                        byte[] data = entry.directory ? new byte[0] : input.readAllBytes()
+                        if (shouldDrop.call(entry.name)) {
+                            removed++
+                        } else {
+                            putEntry(output, entry.name, data, entry.method, entry.time)
+                        }
+                        input.closeEntry()
+                    }
+                }
+            }
+            logger.lifecycle("  ${label}: removed ${removed} unused entries")
+            return bytesOut.toByteArray()
+        }
+
+        boolean foundRocks = false
+        boolean foundSqlite = false
+        int foundLwjgl = 0
+        def rocksKeep = ['librocksdbjni-win64.dll', 'librocksdbjni-linux64.so'] as Set
+        def sqliteKeep = ['org/sqlite/native/Windows/x86_64/',
+                          'org/sqlite/native/Linux/x86_64/']
+
+        if (target.exists() && !target.delete()) {
+            throw new GradleException("Could not replace ${target}")
+        }
+
+        new java.util.zip.ZipFile(source).withCloseable { input ->
+            new java.util.zip.ZipOutputStream(new BufferedOutputStream(new FileOutputStream(target))).withCloseable { output ->
+                def entries = input.entries()
+                while (entries.hasMoreElements()) {
+                    def entry = entries.nextElement()
+                    byte[] data = entry.directory ? new byte[0] : input.getInputStream(entry).withCloseable { it.readAllBytes() }
+                    String name = entry.name
+
+                    if (name.startsWith('META-INF/jarjar/rocksdbjni-') && name.endsWith('.jar')) {
+                        foundRocks = true
+                        data = rewriteNested(data, { String nestedName ->
+                            String baseName = nestedName.substring(nestedName.lastIndexOf('/') + 1)
+                            boolean nativeFile = baseName.startsWith('librocksdbjni-') &&
+                                    (baseName.endsWith('.so') || baseName.endsWith('.dll') || baseName.endsWith('.jnilib'))
+                            return nativeFile && !rocksKeep.contains(baseName)
+                        }, 'rocksdbjni')
+                    } else if (name.startsWith('META-INF/jarjar/sqlite-jdbc-') && name.endsWith('.jar')) {
+                        foundSqlite = true
+                        data = rewriteNested(data, { String nestedName ->
+                            if (!nestedName.startsWith('org/sqlite/native/') || nestedName.endsWith('/')) return false
+                            return !sqliteKeep.any { nestedName.startsWith(it) }
+                        }, 'sqlite-jdbc')
+                    } else if ((name.startsWith('META-INF/jarjar/lwjgl-zstd-') ||
+                                name.startsWith('META-INF/jarjar/lwjgl-lmdb-')) && name.endsWith('.jar')) {
+                        foundLwjgl++
+                        data = rewriteNested(data, { String nestedName ->
+                            nestedName == 'META-INF/versions/9/module-info.class'
+                        }, name.substring(name.lastIndexOf('/') + 1))
+                    }
+
+                    // Every nested archive must be random-accessible to NeoForge's jarjar loader.
+                    int method = name.startsWith('META-INF/jarjar/') && name.endsWith('.jar')
+                            ? java.util.zip.ZipEntry.STORED : entry.method
+                    putEntry(output, name, data, method, entry.time)
+                }
+            }
+        }
+
+        if (!foundRocks || !foundSqlite || foundLwjgl != 2) {
+            target.delete()
+            throw new GradleException("Expected nested dependencies were not found " +
+                    "(rocksdb=${foundRocks}, sqlite=${foundSqlite}, lwjgl=${foundLwjgl}/2)")
+        }
+        logger.lifecycle(String.format(Locale.ROOT, 'Slim JAR: %.1f MB -> %.1f MB',
+                source.length() / 1048576.0d, target.length() / 1048576.0d))
+    }
+}
+
+tasks.named('build') {
+    dependsOn tasks.named('slimJar')
+}
+
 def pythonExecutable = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows') ? 'python' : 'python3'
 
 // Validate mixin configuration (registration, exclusions, remap flags)
