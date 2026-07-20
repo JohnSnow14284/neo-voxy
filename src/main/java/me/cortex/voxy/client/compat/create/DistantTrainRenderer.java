@@ -14,12 +14,10 @@ import org.joml.Math;
 
 import java.util.List;
 
-import static org.lwjgl.opengl.GL11C.GL_ALWAYS;
 import static org.lwjgl.opengl.GL11C.GL_CULL_FACE;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_TEST;
 import static org.lwjgl.opengl.GL11C.GL_EQUAL;
 import static org.lwjgl.opengl.GL11C.GL_KEEP;
-import static org.lwjgl.opengl.GL11C.GL_REPLACE;
 import static org.lwjgl.opengl.GL11C.GL_STENCIL_TEST;
 import static org.lwjgl.opengl.GL11C.glDepthFunc;
 import static org.lwjgl.opengl.GL11C.glDepthMask;
@@ -148,13 +146,12 @@ public final class DistantTrainRenderer implements LodPipelineHooks.Renderer {
                         glDepthFunc(depthFunc);
                         glDepthMask(true);
                         glDisable(GL_CULL_FACE);
-                        //Depth-passing fragments get stencil=3: the sentinel-restore pass and
-                        //iris's depth-hack (both full-mask stencil==0) leave our depth intact,
-                        //while bit0 stays set so translucent LOD (EQUAL,1 mask 0x1) still
-                        //composites distant water in front of us
+                        //Only draw into pixels owned by the LOD pipeline. Vanilla-owned pixels use
+                        //a separately reprojected depth which some shader packs compare differently;
+                        //writing there caused distant trains to expose the terrain behind them.
                         glEnable(GL_STENCIL_TEST);
-                        glStencilFunc(GL_ALWAYS, 3, 0xFF);
-                        glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+                        glStencilFunc(GL_EQUAL, 1, 0x1);
+                        glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
                         renderStateActive = true;
                     }
 

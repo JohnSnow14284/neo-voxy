@@ -8,11 +8,9 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import org.joml.Matrix4f;
 
-import static org.lwjgl.opengl.GL11C.GL_ALWAYS;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_TEST;
 import static org.lwjgl.opengl.GL11C.GL_EQUAL;
 import static org.lwjgl.opengl.GL11C.GL_KEEP;
-import static org.lwjgl.opengl.GL11C.GL_REPLACE;
 import static org.lwjgl.opengl.GL11C.GL_STENCIL_TEST;
 import static org.lwjgl.opengl.GL11C.glDepthFunc;
 import static org.lwjgl.opengl.GL11C.glDepthMask;
@@ -23,8 +21,8 @@ import static org.lwjgl.opengl.GL20C.glUseProgram;
 import static org.lwjgl.opengl.GL30C.glBindVertexArray;
 
 //Draws the frozen kinetic moving-part snapshots (see KineticSnapshots) inside the LOD pipeline: one
-//mesh per section, vertex-baked light, stencil tag 3 and the shared depth so LOD terrain occludes them
-//per pixel - the machines keep their shafts and cogs past the render distance, frozen where they were.
+//mesh per section, vertex-baked light, an LOD-ownership stencil gate and shared depth so LOD terrain
+//occludes them per pixel - machines keep shafts and cogs past render distance, frozen where they were.
 public final class DistantKineticRenderer implements LodPipelineHooks.Renderer {
     public static volatile int lastFrameSectionsDrawn;
 
@@ -111,8 +109,11 @@ public final class DistantKineticRenderer implements LodPipelineHooks.Renderer {
                     //show through, reading as jumbled overlapping models at LOD range
                     org.lwjgl.opengl.GL11C.glDisable(org.lwjgl.opengl.GL11C.GL_CULL_FACE);
                     glEnable(GL_STENCIL_TEST);
-                    glStencilFunc(GL_ALWAYS, 3, 0xFF);
-                    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+                    //Placed kinetic snapshots belong to the LOD side of the handover. Keeping the
+                    //vanilla ownership bit as a hard gate prevents shader depth reprojection error
+                    //from turning a moving machine's screen-space bounds into a see-through hole.
+                    glStencilFunc(GL_EQUAL, 1, 0x1);
+                    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
                     renderStateActive = true;
                 }
 

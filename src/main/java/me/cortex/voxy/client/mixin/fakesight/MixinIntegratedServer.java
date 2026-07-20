@@ -23,9 +23,13 @@ public abstract class MixinIntegratedServer {
                 || !VoxyConfig.CONFIG.isRenderingEnabled()) {
             return originalDistance;
         }
-        // Keep the actual server view radius at the configured target. The previous moving/stationary
-        // radius oscillation repeatedly unloaded the outer cache and could therefore never accumulate
-        // data at the selected distance while travelling.
-        return Math.max(originalDistance, VoxyConfig.CONFIG.getRequestDistance());
+        // Keep the radius stable while travelling, but never drive the local server at the protocol
+        // ceiling. A 127-chunk radius is roughly 65k chunks; ticket updates then fall behind the
+        // player and loading terrain waits for an impractical initial region. 32 is vanilla's
+        // practical maximum and still leaves a wide ring for Voxy ingestion.
+        int safeRequestDistance = Math.min(
+                VoxyConfig.CONFIG.getRequestDistance(),
+                VoxyConfig.MAX_INTEGRATED_REQUEST_DISTANCE);
+        return Math.max(originalDistance, safeRequestDistance);
     }
 }

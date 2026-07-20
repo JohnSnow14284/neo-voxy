@@ -6,12 +6,10 @@ import me.cortex.voxy.client.core.rendering.Viewport;
 import net.minecraft.client.Minecraft;
 import org.joml.Matrix4f;
 
-import static org.lwjgl.opengl.GL11C.GL_ALWAYS;
 import static org.lwjgl.opengl.GL11C.GL_CULL_FACE;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_TEST;
 import static org.lwjgl.opengl.GL11C.GL_EQUAL;
 import static org.lwjgl.opengl.GL11C.GL_KEEP;
-import static org.lwjgl.opengl.GL11C.GL_REPLACE;
 import static org.lwjgl.opengl.GL11C.GL_STENCIL_TEST;
 import static org.lwjgl.opengl.GL11C.glDepthFunc;
 import static org.lwjgl.opengl.GL11C.glDepthMask;
@@ -26,8 +24,8 @@ import static org.lwjgl.opengl.GL30C.glBindVertexArray;
 //Draws the frozen distant-contraption snapshots (see DistantContraptionManager) as static rigid
 //meshes inside the LOD pipeline, exactly where the vanilla/Flywheel render stops. A snapshot's stored
 //`local` is already the full applyLocalTransforms matrix, so the draw is just VP · translate(pos-cam)
-//· local - no per-subclass rebuild. Same distant vertex format, stencil tag and light-uniform path as
-//the train renderer; occlusion against LOD terrain is per-pixel via the shared depth.
+//· local - no per-subclass rebuild. Same distant vertex format, LOD-ownership stencil gate and
+//light-uniform path as the train renderer; occlusion against LOD terrain is per-pixel via shared depth.
 public final class DistantContraptionRenderer implements LodPipelineHooks.Renderer {
     public static volatile int lastFrameDrawn;
 
@@ -112,9 +110,14 @@ public final class DistantContraptionRenderer implements LodPipelineHooks.Render
                     glDepthFunc(depthFunc);
                     glDepthMask(true);
                     glDisable(GL_CULL_FACE);
+                    //Never overwrite pixels owned by vanilla terrain (stencil bit0 == 0). Under
+                    //shader packs their reprojected depth is not guaranteed to compare identically
+                    //to Voxy's far projection; accepting every stencil value let a contraption pass
+                    //through that depth and punch a contraption-shaped hole in vanilla chunks.
+                    //LOD-owned pixels have bit0 set and already carry the matching Voxy depth.
                     glEnable(GL_STENCIL_TEST);
-                    glStencilFunc(GL_ALWAYS, 3, 0xFF);
-                    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+                    glStencilFunc(GL_EQUAL, 1, 0x1);
+                    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
                     renderStateActive = true;
                 }
 

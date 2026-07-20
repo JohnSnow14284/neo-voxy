@@ -125,7 +125,7 @@ public class VoxyNeoForgeConfig {
             .define("renderStatistics", false);
 
     // Create mod integration: render distant trains/tracks/contraptions and cull placed kinetic parts.
-    // The *MaxChunks caps are in chunks; 0 = follow voxy's LOD radius (2 * sectionRenderDistance chunks).
+    // The *MaxChunks caps are in chunks; 0 = follow voxy's LOD radius (32 * sectionRenderDistance chunks).
     // Lowering a cap renders that integration nearer to save GPU; the train cap also shrinks the
     // server's pose-stream window on the integrated server (less bandwidth).
     private static final ModConfigSpec.BooleanValue DISTANT_TRAINS = BUILDER
@@ -136,7 +136,7 @@ public class VoxyNeoForgeConfig {
             .comment("Max distance to render distant trains, in chunks. 0 = follow the LOD radius.",
                      "Lower renders trains nearer; on the integrated server it also shrinks the",
                      "server's train pose-stream window, cutting bandwidth.")
-            .defineInRange("distantTrainMaxChunks", 0, 0, 192);
+            .defineInRange("distantTrainMaxChunks", 0, 0, VoxyConfig.MAX_CREATE_DISTANCE_CHUNKS);
 
     private static final ModConfigSpec.BooleanValue DISTANT_TRACKS = BUILDER
             .comment("Render the Create track network beyond the view distance, in the LOD")
@@ -144,7 +144,7 @@ public class VoxyNeoForgeConfig {
 
     private static final ModConfigSpec.IntValue DISTANT_TRACK_MAX_CHUNKS = BUILDER
             .comment("Max distance to render the distant track network, in chunks. 0 = follow the LOD radius.")
-            .defineInRange("distantTrackMaxChunks", 0, 0, 192);
+            .defineInRange("distantTrackMaxChunks", 0, 0, VoxyConfig.MAX_CREATE_DISTANCE_CHUNKS);
 
     private static final ModConfigSpec.BooleanValue DISTANT_CONTRAPTIONS = BUILDER
             .comment("Render snapshots of Create contraptions (bearings/pistons/gantries/mounted)",
@@ -153,7 +153,7 @@ public class VoxyNeoForgeConfig {
 
     private static final ModConfigSpec.IntValue DISTANT_CONTRAPTION_MAX_CHUNKS = BUILDER
             .comment("Max distance to render distant contraptions, in chunks. 0 = follow the LOD radius.")
-            .defineInRange("distantContraptionMaxChunks", 0, 0, 192);
+            .defineInRange("distantContraptionMaxChunks", 0, 0, VoxyConfig.MAX_CREATE_DISTANCE_CHUNKS);
 
     private static final ModConfigSpec.BooleanValue DISTANT_KINETICS = BUILDER
             .comment("Cull placed kinetic machine moving parts (rotating shafts/gears) beyond the render",

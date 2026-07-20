@@ -103,7 +103,9 @@ public class Voxy {
     }
 
     private static void registerPayloads(net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) {
-        var registrar = event.registrar("1").optional();
+        //Version 2 adds the client -> server per-player train render-distance request. Keep the
+        //registrar optional so mismatched/vanilla servers simply disable this integration.
+        var registrar = event.registrar("2").optional();
         registrar.playToClient(
                 me.cortex.voxy.commonImpl.compat.create.DistantTrainProtocol.CarriageShapePayload.TYPE,
                 me.cortex.voxy.commonImpl.compat.create.DistantTrainProtocol.CarriageShapePayload.CODEC,
@@ -112,6 +114,12 @@ public class Voxy {
                         ctx.enqueueWork(() -> me.cortex.voxy.client.compat.create.DistantTrainManager.handleShape(payload));
                     }
                 });
+        registrar.playToServer(
+                me.cortex.voxy.commonImpl.compat.create.DistantTrainProtocol.TrainRenderRequestPayload.TYPE,
+                me.cortex.voxy.commonImpl.compat.create.DistantTrainProtocol.TrainRenderRequestPayload.CODEC,
+                (payload, ctx) -> ctx.enqueueWork(() ->
+                        me.cortex.voxy.commonImpl.compat.create.DistantTrainConfig.updatePlayerConfig(
+                                ctx.player().getUUID(), payload.enabled(), payload.maxDistanceBlocks())));
         registrar.playToClient(
                 me.cortex.voxy.commonImpl.compat.create.DistantTrainProtocol.TrainPosesPayload.TYPE,
                 me.cortex.voxy.commonImpl.compat.create.DistantTrainProtocol.TrainPosesPayload.CODEC,

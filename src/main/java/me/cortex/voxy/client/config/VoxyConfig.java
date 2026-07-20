@@ -30,7 +30,14 @@ public class VoxyConfig {
     public static final int MIN_REQUEST_DISTANCE = 8;
     // ClientInformation serializes the view distance as one signed byte.
     public static final int MAX_REQUEST_DISTANCE = 127;
+    // The integrated server must own and continuously re-centre every requested chunk. Driving it
+    // at the protocol ceiling creates a roughly 65k-chunk ticket area, causing world entry and the
+    // player-centred loading window to stall. Dedicated servers still enforce their own ceiling.
+    public static final int MAX_INTEGRATED_REQUEST_DISTANCE = 32;
     public static final int MAX_CLOUD_DISTANCE = 128;
+    public static final int CHUNKS_PER_SECTION_RENDER_DISTANCE = 32;
+    public static final int BLOCKS_PER_CHUNK = 16;
+    public static final int MAX_CREATE_DISTANCE_CHUNKS = 64 * CHUNKS_PER_SECTION_RENDER_DISTANCE;
     public static final float MIN_SUBDIVISION_SIZE = 28.0f;
     public static final float MAX_SUBDIVISION_SIZE = 256.0f;
 
@@ -63,7 +70,7 @@ public class VoxyConfig {
     // with voxy rendering off; complements the raycast culler, which cannot catch this case.
     public boolean kineticEnclosedCulling = true;
     // Create distant-integration render caps, in CHUNKS. 0 = follow voxy's LOD radius
-    // (2 * sectionRenderDistance chunks). A lower value renders that integration nearer, cutting GPU
+    // (32 * sectionRenderDistance chunks). A lower value renders that integration nearer, cutting GPU
     // load; for trains it also shrinks the server pose-stream window (less bandwidth) on the integrated
     // server. Clamped to the LOD radius - there is no LOD terrain to sit against beyond it.
     public int distantTrainMaxChunks = 0;
@@ -206,6 +213,9 @@ public class VoxyConfig {
         this.lodBoundaryInset = Math.clamp(this.lodBoundaryInset, 8, 32);
         this.setLeafLodMode(this.getLeafLodMode());
         this.farPlayerAnimationDistance = Math.clamp(this.farPlayerAnimationDistance, 0, 32768);
+        this.distantTrainMaxChunks = Math.clamp(this.distantTrainMaxChunks, 0, MAX_CREATE_DISTANCE_CHUNKS);
+        this.distantTrackMaxChunks = Math.clamp(this.distantTrackMaxChunks, 0, MAX_CREATE_DISTANCE_CHUNKS);
+        this.distantContraptionMaxChunks = Math.clamp(this.distantContraptionMaxChunks, 0, MAX_CREATE_DISTANCE_CHUNKS);
     }
 
     public void save() {
@@ -266,13 +276,15 @@ public class VoxyConfig {
                 this.isRenderingEnabled() && this.distantTrains,
                 this.createRenderDistance(this.distantTrainMaxChunks)
         );
+        me.cortex.voxy.client.compat.create.DistantTrainClientSync.sendCurrent();
     }
 
     // Effective distant-render radius in blocks for a Create integration given its chunk cap. 0 (or
-    // negative) follows voxy's LOD radius (32 * sectionRenderDistance); a positive cap is clamped to
-    // it, since there is no LOD terrain to occlude against past the LOD radius.
+    // negative) follows voxy's LOD radius (32 chunks per section-render-distance unit, then 16 blocks
+    // per chunk); a positive chunk cap is clamped to it, since there is no LOD terrain to occlude
+    // against past the LOD radius.
     public double createLodRadius() {
-        return 32.0 * this.sectionRenderDistance;
+        return CHUNKS_PER_SECTION_RENDER_DISTANCE * BLOCKS_PER_CHUNK * this.sectionRenderDistance;
     }
 
     public double createRenderDistance(int maxChunks) {

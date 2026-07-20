@@ -323,7 +323,7 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                                         "voxy:distant_train_distance",
                                         Component.translatable("voxy.config.compat.distantTrainDistance"),
                                         ()->CFG.distantTrainMaxChunks, v->CFG.distantTrainMaxChunks=v,
-                                        new Range(0, 192, 8))
+                                        new Range(0, VoxyConfig.MAX_CREATE_DISTANCE_CHUNKS, 8))
                                         .setFormatter(VoxyConfigMenu::formatCreateDistance)
                                         .setImpact(OptionImpact.LOW),
                                 new BoolOption(
@@ -335,7 +335,7 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                                         "voxy:distant_track_distance",
                                         Component.translatable("voxy.config.compat.distantTrackDistance"),
                                         ()->CFG.distantTrackMaxChunks, v->CFG.distantTrackMaxChunks=v,
-                                        new Range(0, 192, 8))
+                                        new Range(0, VoxyConfig.MAX_CREATE_DISTANCE_CHUNKS, 8))
                                         .setFormatter(VoxyConfigMenu::formatCreateDistance)
                                         .setImpact(OptionImpact.LOW),
                                 new BoolOption(
@@ -347,7 +347,7 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                                         "voxy:distant_contraption_distance",
                                         Component.translatable("voxy.config.compat.distantContraptionDistance"),
                                         ()->CFG.distantContraptionMaxChunks, v->CFG.distantContraptionMaxChunks=v,
-                                        new Range(0, 192, 8))
+                                        new Range(0, VoxyConfig.MAX_CREATE_DISTANCE_CHUNKS, 8))
                                         .setFormatter(VoxyConfigMenu::formatCreateDistance)
                                         .setImpact(OptionImpact.LOW),
                                 new BoolOption(

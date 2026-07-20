@@ -176,13 +176,13 @@ public class VoxyCommands {
     }
 
     //Dumps the client-side distant-train state: render gates plus every tracked train with sample
-    //age and distance. Zero tracked trains with a moving train 192-3072 blocks away means the
-    //server side is not sampling (old jar or no voxy on the server).
+    //age and distance. Zero tracked trains while a moving train is between the vanilla handover and
+    //the configured renderDist means the server is not sampling (old jar, cap, or no voxy server).
     private static int dumpTrains(CommandContext<CommandSourceStack> ctx) {
         var cfg = me.cortex.voxy.client.config.VoxyConfig.CONFIG;
         var sb = new StringBuilder("distant trains: rendering=").append(cfg.isRenderingEnabled())
                 .append(" distantTrains=").append(cfg.distantTrains)
-                .append(" renderDist=").append((int) (32 * cfg.sectionRenderDistance))
+                .append(" renderDist=").append((int) cfg.createRenderDistance(cfg.distantTrainMaxChunks))
                 .append(" bogeyMeshes=").append(me.cortex.voxy.client.compat.create.DistantTrainRenderer.bogeyMeshProvider != null)
                 .append(" drawnLastFrame=").append(me.cortex.voxy.client.compat.create.DistantTrainRenderer.lastFrameCarriagesDrawn)
                 .append(" shapesReceived=").append(me.cortex.voxy.client.compat.create.DistantTrainManager.shapesReceived)
