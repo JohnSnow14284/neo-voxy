@@ -16,7 +16,6 @@ import net.caffeinemc.mods.sodium.api.config.option.OptionImpact;
 import net.caffeinemc.mods.sodium.api.config.option.Range;
 import net.caffeinemc.mods.sodium.api.config.structure.ConfigBuilder;
 import net.minecraft.client.Minecraft;
-import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.fml.ModList;
@@ -151,8 +150,7 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                                         .setImpact(OptionImpact.HIGH),
                                 new BoolOption(
                                         "voxy:lod_boundary_fade",
-                                        Component.translatable("voxy.config.general.lodBoundaryFade.warning")
-                                                .withStyle(ChatFormatting.RED, ChatFormatting.BOLD),
+                                        Component.translatable("voxy.config.general.lodBoundaryFade"),
                                         ()->CFG.enableLodBoundaryFade, v->CFG.enableLodBoundaryFade=v)
                                         .setImpact(OptionImpact.LOW),
                                 new IntOption(

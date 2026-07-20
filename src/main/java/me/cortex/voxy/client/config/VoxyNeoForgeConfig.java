@@ -47,7 +47,7 @@ public class VoxyNeoForgeConfig {
     private static final ModConfigSpec.DoubleValue SUB_DIVISION_SIZE = BUILDER
             .comment("Subdivision size for LOD rendering (28-256)",
                      "Lower = more detailed LODs but more GPU load")
-            .defineInRange("subDivisionSize", 63.0, 28.0, 256.0);
+            .defineInRange("subDivisionSize", 126.0, 28.0, 256.0);
 
     private static final ModConfigSpec.BooleanValue USE_ENVIRONMENTAL_FOG = BUILDER
             .comment("Apply environmental fog to LOD terrain")
@@ -62,8 +62,9 @@ public class VoxyNeoForgeConfig {
             .defineInRange("lodBoundaryBuffer", 1, 0, 4);
 
     private static final ModConfigSpec.BooleanValue ENABLE_LOD_BOUNDARY_FADE = BUILDER
-            .comment("Use a camera-centred circular handoff between vanilla terrain and Voxy LOD.",
-                     "Disable this when the active shader pack already supplies an LOD fade (for example Photon).")
+            .comment("Enable LOD fade.",
+                     "Uses a camera-centred circular handoff between vanilla terrain and Voxy LOD.",
+                     "Disable it when the active shader pack already supplies an LOD fade, for example Photon.")
             .define("enableLodBoundaryFade", true);
 
     private static final ModConfigSpec.IntValue LOD_BOUNDARY_FADE_LENGTH = BUILDER
@@ -76,7 +77,7 @@ public class VoxyNeoForgeConfig {
 
     private static final ModConfigSpec.BooleanValue ENABLE_EXTENDED_REQUEST_DISTANCE = BUILDER
             .comment("Enable FakeSight-style extended chunk requests for Voxy ingestion")
-            .define("enableExtendedRequestDistance", true);
+            .define("enableExtendedRequestDistance", false);
 
     private static final ModConfigSpec.BooleanValue FOLLOW_LOD_REQUEST_DISTANCE = BUILDER
             .comment("Follow Voxy's LOD radius for chunk requests, capped by the vanilla protocol at 127 chunks")

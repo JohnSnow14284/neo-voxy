@@ -6,7 +6,7 @@ Neo-Voxy is an unofficial NeoForge port and compatibility-focused fork of
 [Voxy](https://github.com/MCRcortex/voxy). It currently has separate branches for Minecraft
 **1.21.1** and **26.1.2**.
 
-Maintained by **NHblock714**.
+Maintained by **JohnSnow**. Repository: [NHblock-Johnsnow/neo-voxy](https://github.com/NHblock-Johnsnow/neo-voxy).
 
 > [!CAUTION]
 > **Do not enable Neo-Voxy's circular LOD fade together with a shader pack that already implements
@@ -17,9 +17,10 @@ Maintained by **NHblock714**.
 ## 简体中文
 
 Neo-Voxy 为远距离地形提供高性能 LOD 渲染，并针对 NeoForge、Sodium、Iris 以及部分大型模组
-进行兼容性维护，由 **NHblock714** 维护。两个 Minecraft 分支分别构建，**JAR 与缓存不能跨版本混用**。
-
+进行兼容性维护，由 **JohnSnow** 维护。仓库：[NHblock-Johnsnow/neo-voxy](https://github.com/NHblock-Johnsnow/neo-voxy)。两个 Minecraft 分支分别构建，**JAR 与缓存不能跨版本混用**。
+所有“机械动力”“Sable”“节气”等模组联动功能均来自**NHblock714**，该版本是建立在其基础上进行新增功能，例如平滑LOD、Fakesight集成和模拟殖民地支持。
 ### 版本与功能对比
+
 
 | 功能 | 1.21.1 | 26.1.2 | 说明 |
 |---|:---:|:---:|---|
@@ -50,7 +51,7 @@ Neo-Voxy 为远距离地形提供高性能 LOD 渲染，并针对 NeoForge、Sod
 | Sodium | ✅ 0.8.12 | ✅ 0.9.1 | 目标版本；不建议跨大版本使用 |
 | Iris | ✅ 1.8.12+ | ✅ 1.11.2 | 光影包需要自行适配远景渲染语义 |
 | Create | ✅ 6.0.10 专项 | 基础兼容 | 1.21.1 提供远景列车、轨道、动态结构及动力部件交接 |
-| Sable | ⚠️ 2.0.3 专项 | 无专项实现 | 保留远景载具加载与距离扩展；高风险联合深度重定向默认关闭 |
+| Sable | ✅ 2.0.3 专项 | 无专项实现 | 保留远景载具加载与距离扩展；高风险联合深度重定向默认关闭 |
 | Domum Ornamentum | ✅ 专项 | 无专项实现 | 按方块实体材质数据缓存独立颜色与轻量模型 |
 | Supplementaries / Lumisene | ✅ 专项 | 无专项实现 | 专用流体颜色、透明度及表面模型处理 |
 | EclipticSeasons | ✅ 0.13.8.4.1 专项 | 无专项实现 | 季节积雪 LOD 与季节变化后的可选重载 |
@@ -125,7 +126,7 @@ mod cannot run alongside basic terrain LOD rendering.
 | Sodium | ✅ 0.8.12 | ✅ 0.9.1 | Target versions; crossing major versions is not recommended |
 | Iris | ✅ 1.8.12+ | ✅ 1.11.2 | Shader packs must understand distant-terrain rendering semantics |
 | Create | ✅ 6.0.10 integration | Basic only | 1.21.1 adds distant trains, tracks, contraptions, and kinetic handoff |
-| Sable | ⚠️ 2.0.3 integration | No dedicated support | Distant loading/range remains; unsafe combined-depth redirection is off by default |
+| Sable | ✅ 2.0.3 integration | No dedicated support | Distant loading/range remains; unsafe combined-depth redirection is off by default |
 | Domum Ornamentum | ✅ Integrated | No dedicated support | Cached block-entity material colours and lightweight independent models |
 | Supplementaries / Lumisene | ✅ Integrated | No dedicated support | Dedicated fluid colour, transparency, and surface handling |
 | EclipticSeasons | ✅ 0.13.8.4.1 integration | No dedicated support | Seasonal snow LOD and optional reload on season changes |

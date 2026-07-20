@@ -1,7 +1,7 @@
 modLoader="javafml"
 loaderVersion="[4,)"
 license="All-Rights-Reserved"
-issueTrackerURL="https://github.com/NHblock714/voxy/issues"
+issueTrackerURL="https://github.com/NHblock-Johnsnow/neo-voxy/issues"
 
 [[mods]]
 modId="voxy"
@@ -9,7 +9,7 @@ version="${version}"
 displayName="neo-voxy"
 description="NeoForge Voxy fork (far-distance LOD rendering) with bundled mod integrations: Create (distant trains, tracks, contraptions, kinetic culling), sable contraption LOD, and EclipticSeasons seasonal snow"
 authors="Cortex"
-credits="Fork maintained by NHblock"
+credits="Fork maintained by JohnSnow"
 logoFile="assets/voxy/icon.png"
 
 [[dependencies.voxy]]

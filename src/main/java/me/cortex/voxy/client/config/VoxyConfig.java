@@ -81,7 +81,7 @@ public class VoxyConfig {
     // Aero/sable: render simulated contraptions within this % of voxy's LOD render distance.
     public int simulatedContraptionRenderDistancePercent = 50;
     public int serviceThreads = (int) Math.max(CpuLayout.getCoreCount()/1.5, 1);
-    public float subDivisionSize = 28;
+    public float subDivisionSize = 126;
     public int skyFogDistance = 96;
     public float fogIntensity = 1.0f;
     public float fogDensity = 0.0f;
@@ -99,7 +99,7 @@ public class VoxyConfig {
     public int earthCurveRatio = 0;
     // FakeSight-style chunk request extension. 127 is the protocol ceiling because vanilla writes
     // ClientInformation.viewDistance as a signed byte.
-    public boolean enableExtendedRequestDistance = true;
+    public boolean enableExtendedRequestDistance = false;
     public boolean followLodRequestDistance = true;
     public int requestDistance = 48;
     public String ssaoMode;
