@@ -33,6 +33,8 @@
   "voxy.config.general.lodBoundaryFadeLength.tooltip": "交接带宽度，单位为方块。加宽后移动变化更渐进，但抖动区域也会更宽。",
   "voxy.config.general.lodBoundaryInset": "LOD 过渡安全内缩",
   "voxy.config.general.lodBoundaryInset.tooltip": "将过渡外沿从原版渲染距离向内移动，确保交接带后方已有原版区块。",
+  "voxy.config.general.distantBeaconBeams": "远景信标光束",
+  "voxy.config.general.distantBeaconBeams.tooltip": "缓存已激活信标的原版光束分段及染色玻璃混色结果，在 256 格外一直渲染到 Voxy LOD 半径。使用轻量静态交叉面，不扫描世界。",
   "voxy.config.general.environmental_fog": "启用环境雾",
   "voxy.config.general.environmental_fog.tooltip": "启用或禁用 Voxy LOD 地形的环境雾效果",
   "voxy.config.general.ssao_mode": "SSAO 模式",

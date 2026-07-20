@@ -171,6 +171,11 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                                         .setFormatter(v->Component.literal(v + " blocks"))
                                         .setEnabler("voxy:lod_boundary_fade")
                                         .setImpact(OptionImpact.LOW),
+                                new BoolOption(
+                                        "voxy:distant_beacon_beams",
+                                        Component.translatable("voxy.config.general.distantBeaconBeams"),
+                                        ()->CFG.distantBeaconBeams, v->CFG.distantBeaconBeams=v)
+                                        .setImpact(OptionImpact.LOW),
                                 new EnumOption<>(
                                         "voxy:leaf_lod_mode",
                                         VoxyConfig.LeafLodMode.class,

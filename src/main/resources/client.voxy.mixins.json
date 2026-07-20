@@ -11,6 +11,7 @@
     "minecraft.MixinClientCommonPacketListenerImpl",
     "minecraft.MixinClientLevel",
     "minecraft.MixinClientPacketListener",
+    "minecraft.MixinBeaconBlockEntity",
     "minecraft.MixinDebugScreenOverlay",
     "minecraft.MixinFogRenderer",
     "minecraft.MixinGameRenderer",

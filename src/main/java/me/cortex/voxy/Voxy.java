@@ -59,6 +59,12 @@ public class Voxy {
             // Voxy's Sodium video-settings page is registered by VoxyConfigMenu (@ConfigEntryPointForge,
             // Sodium 0.8 native config API), not here.
 
+            //Vanilla beacon beam sections already contain the exact stained-glass blended colours.
+            //Cache those sparse sections and render their lightweight meshes in the LOD pipeline.
+            var beaconRenderer = me.cortex.voxy.client.compat.beacon.DistantBeaconRenderer.INSTANCE;
+            NeoForge.EVENT_BUS.register(beaconRenderer);
+            me.cortex.voxy.client.compat.LodPipelineHooks.register(beaconRenderer);
+
             // EclipticSeasons compat: rebuild the LOD renderer on season change. Gated on the mod being present
             // so the snow-LOD code (which references EclipticSeasons client classes) never loads without it.
             if (ModList.get().isLoaded("eclipticseasons")) {

@@ -22,9 +22,11 @@ import static org.lwjgl.opengl.GL45C.glBindTextureUnit;
 public final class DistantShaders {
     private static Shader vertexLight;
     private static Shader uniformLight;
+    private static Shader beaconSolid;
 
     private static Shader patchedVertexLight;
     private static Shader patchedUniformLight;
+    private static Shader patchedBeaconSolid;
     private static AbstractRenderPipeline patchedOwner;
     private static boolean patchAvailable;
     private static boolean patchFailed;
@@ -37,12 +39,18 @@ public final class DistantShaders {
     //glLinkProgram here on a 523ms frame. Called during renderer init, where a stall is behind the
     //loading screen. Failure is not fatal: forPipeline still falls back to the unpatched shaders.
     public static void warmup(AbstractRenderPipeline pipeline) {
-        if (!net.neoforged.fml.ModList.get().isLoaded("create")) {
+        boolean createInstalled = net.neoforged.fml.ModList.get().isLoaded("create");
+        if (!createInstalled && !me.cortex.voxy.client.config.VoxyConfig.CONFIG.distantBeaconBeams) {
             return;
         }
         try {
             forPipeline(pipeline, false);
-            forPipeline(pipeline, true);
+            if (me.cortex.voxy.client.config.VoxyConfig.CONFIG.distantBeaconBeams) {
+                forBeaconPipeline(pipeline);
+            }
+            if (createInstalled) {
+                forPipeline(pipeline, true);
+            }
         } catch (Throwable e) {
             Logger.error("Distant shader warmup failed; they will compile on first use instead", e);
         }
@@ -85,6 +93,41 @@ public final class DistantShaders {
         }
     }
 
+    //Exact-colour, full-bright solid variant used by the lightweight beacon core. It retains the
+    //same shader-pack g-buffer contract as the other distant meshes, but skips diffuse alpha.
+    public static Shader forBeaconPipeline(AbstractRenderPipeline pipeline) {
+        if (patchedOwner != pipeline) {
+            freePatched();
+            patchedOwner = pipeline;
+            patchFailed = false;
+            String probe = null;
+            try {
+                probe = pipeline.patchOpaqueShader(null, "");
+            } catch (Throwable ignored) {
+            }
+            patchAvailable = probe != null;
+        }
+        if (!patchAvailable || patchFailed) {
+            return beaconSolid();
+        }
+        try {
+            if (patchedBeaconSolid == null) {
+                String frag = pipeline.patchOpaqueShader(null, ShaderLoader.parse("voxy:compat/distant.frag"));
+                patchedBeaconSolid = Shader.make()
+                        .define("PATCHED_SHADER")
+                        .define("SOLID_COLOR")
+                        .add(ShaderType.VERTEX, "voxy:compat/distant.vert")
+                        .addSource(ShaderType.FRAGMENT, frag)
+                        .compile().name("distant_beacon_solid_patched");
+            }
+            return patchedBeaconSolid;
+        } catch (Throwable e) {
+            patchFailed = true;
+            Logger.error("Failed to compile shader-pack patched beacon LOD shader; falling back to plain", e);
+            return beaconSolid();
+        }
+    }
+
     private static Shader compilePatched(AbstractRenderPipeline pipeline, boolean uniformLightVariant) {
         String frag = pipeline.patchOpaqueShader(null, ShaderLoader.parse("voxy:compat/distant.frag"));
         return Shader.make()
@@ -96,6 +139,10 @@ public final class DistantShaders {
     }
 
     private static void freePatched() {
+        if (patchedBeaconSolid != null) {
+            patchedBeaconSolid.free();
+            patchedBeaconSolid = null;
+        }
         if (patchedVertexLight != null) {
             patchedVertexLight.free();
             patchedVertexLight = null;
@@ -125,6 +172,17 @@ public final class DistantShaders {
                     .compile().name("distant_uniform_light");
         }
         return uniformLight;
+    }
+
+    private static Shader beaconSolid() {
+        if (beaconSolid == null) {
+            beaconSolid = Shader.make()
+                    .define("SOLID_COLOR")
+                    .add(ShaderType.VERTEX, "voxy:compat/distant.vert")
+                    .add(ShaderType.FRAGMENT, "voxy:compat/distant.frag")
+                    .compile().name("distant_beacon_solid");
+        }
+        return beaconSolid;
     }
 
     //Raw binds; the surrounding renderStateGuarded restores whatever was here before

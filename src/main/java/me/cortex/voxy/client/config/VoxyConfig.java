@@ -52,6 +52,8 @@ public class VoxyConfig {
     public boolean enabled = true;
     public boolean enableRendering = true;
     public boolean ingestEnabled = true;
+    //Render cached, correctly coloured vanilla beacon beams beyond the vanilla BER distance.
+    public boolean distantBeaconBeams = true;
     public float sectionRenderDistance = 16;
     // Aero/sable: master switch for extending simulated-contraption rendering out to LOD distances.
     public boolean sableLodRendering = true;

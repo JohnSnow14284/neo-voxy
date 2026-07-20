@@ -33,6 +33,8 @@
   "voxy.config.general.lodBoundaryFadeLength.tooltip": "Width of the handoff band in blocks. Wider values change more gradually while moving, but make the dithered region wider.",
   "voxy.config.general.lodBoundaryInset": "LOD transition safety inset",
   "voxy.config.general.lodBoundaryInset.tooltip": "Moves the outer handoff edge inward from vanilla render distance so loaded vanilla terrain remains behind the transition.",
+  "voxy.config.general.distantBeaconBeams": "Distant beacon beams",
+  "voxy.config.general.distantBeaconBeams.tooltip": "Cache active beacon beam sections and render their exact stained-glass colours from 256 blocks out to the Voxy LOD radius. Uses lightweight static crossed planes and does not scan the world.",
   "voxy.config.general.environmental_fog": "Enable environmental fog",
   "voxy.config.general.environmental_fog.tooltip": "Enables or disables voxy rendering environmental fog",
   "voxy.config.general.ssao_mode": "SSAO Mode",

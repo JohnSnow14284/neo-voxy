@@ -124,6 +124,10 @@ public class VoxyNeoForgeConfig {
                      "Displays LOD traversal counts, visible sections, and quad counts")
             .define("renderStatistics", false);
 
+    private static final ModConfigSpec.BooleanValue DISTANT_BEACON_BEAMS = BUILDER
+            .comment("Render correctly coloured vanilla beacon beams beyond 256 blocks, out to the LOD radius")
+            .define("distantBeaconBeams", true);
+
     // Create mod integration: render distant trains/tracks/contraptions and cull placed kinetic parts.
     // The *MaxChunks caps are in chunks; 0 = follow voxy's LOD radius (32 * sectionRenderDistance chunks).
     // Lowering a cap renders that integration nearer to save GPU; the train cap also shrinks the
@@ -186,6 +190,7 @@ public class VoxyNeoForgeConfig {
         VoxyConfig.CONFIG.followLodRequestDistance = FOLLOW_LOD_REQUEST_DISTANCE.get();
         VoxyConfig.CONFIG.requestDistance = REQUEST_DISTANCE.get();
         VoxyConfig.CONFIG.earthCurveRatio = EARTH_CURVE_RATIO.get();
+        VoxyConfig.CONFIG.distantBeaconBeams = DISTANT_BEACON_BEAMS.get();
         // Create integration
         VoxyConfig.CONFIG.distantTrains = DISTANT_TRAINS.get();
         VoxyConfig.CONFIG.distantTrainMaxChunks = DISTANT_TRAIN_MAX_CHUNKS.get();
@@ -226,6 +231,7 @@ public class VoxyNeoForgeConfig {
         FOLLOW_LOD_REQUEST_DISTANCE.set(VoxyConfig.CONFIG.followLodRequestDistance);
         REQUEST_DISTANCE.set(VoxyConfig.CONFIG.requestDistance);
         EARTH_CURVE_RATIO.set(VoxyConfig.CONFIG.earthCurveRatio);
+        DISTANT_BEACON_BEAMS.set(VoxyConfig.CONFIG.distantBeaconBeams);
         // Create integration
         DISTANT_TRAINS.set(VoxyConfig.CONFIG.distantTrains);
         DISTANT_TRAIN_MAX_CHUNKS.set(VoxyConfig.CONFIG.distantTrainMaxChunks);
