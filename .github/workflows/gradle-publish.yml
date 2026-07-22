@@ -30,56 +30,66 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build mod with Gradle
-        run: ./gradlew -I init.gradle build --no-daemon
+        run: ./gradlew -I init.gradle clean build --no-daemon
 
-      # build/libs also contains a large intermediate jar on the 1.21.1 branch. Stage exactly one
-      # distributable so upload-artifact can never pick up both it and the trimmed release jar.
       - name: Select release JAR
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf build/release
           mkdir -p build/release
 
-          mapfile -t slim_jars < <(find build/libs -maxdepth 1 -type f \
-            -name 'neo-voxy-*-slim.jar' -print | sort)
-
-          if (( ${#slim_jars[@]} == 1 )); then
-            release_jar="${slim_jars[0]}"
-          elif (( ${#slim_jars[@]} > 1 )); then
-            echo "Expected one slim release JAR, found ${#slim_jars[@]}:" >&2
-            printf '  %s\n' "${slim_jars[@]}" >&2
-            exit 1
+          if [[ -f build/libs/neo-voxy.jar ]]; then
+            release_jar="build/libs/neo-voxy.jar"
           else
-            mapfile -t release_jars < <(find build/libs -maxdepth 1 -type f \
-              -name 'neo-voxy-*.jar' \
-              ! -name '*-unoptimized.jar' \
-              ! -name '*-sources.jar' \
-              ! -name '*-dev.jar' -print | sort)
-            if (( ${#release_jars[@]} != 1 )); then
-              echo "Expected one release JAR, found ${#release_jars[@]}:" >&2
-              printf '  %s\n' "${release_jars[@]}" >&2
+            mapfile -t slim_jars < <(
+              find build/libs -maxdepth 1 -type f \
+                -name 'neo-voxy-*-slim.jar' -print | sort
+            )
+
+            if (( ${#slim_jars[@]} == 1 )); then
+              release_jar="${slim_jars[0]}"
+            elif (( ${#slim_jars[@]} > 1 )); then
+              echo "Expected one slim release JAR, found ${#slim_jars[@]}:" >&2
+              printf '  %s\n' "${slim_jars[@]}" >&2
               exit 1
+            else
+              mapfile -t release_jars < <(
+                find build/libs -maxdepth 1 -type f \
+                  \( -name 'neo-voxy.jar' -o -name 'neo-voxy-*.jar' \) \
+                  ! -name '*-unoptimized.jar' \
+                  ! -name '*-sources.jar' \
+                  ! -name '*-dev.jar' \
+                  ! -name '*-slim.jar' \
+                  -print | sort
+              )
+
+              if (( ${#release_jars[@]} != 1 )); then
+                echo "Expected one release JAR, found ${#release_jars[@]}:" >&2
+                find build/libs -maxdepth 1 -type f -name '*.jar' -print >&2
+                exit 1
+              fi
+
+              release_jar="${release_jars[0]}"
             fi
-            release_jar="${release_jars[0]}"
           fi
 
-          cp "$release_jar" build/release/
           release_size=$(stat -c '%s' "$release_jar")
           echo "Selected release: $release_jar ($release_size bytes)"
 
-          # The current 1.21.1 slim artifact is about 13 MiB. Treat a much larger file as a failed
-          # trimming step instead of silently publishing another 90 MiB artifact.
-          if [[ "$release_jar" == *-slim.jar ]] && (( release_size > 33554432 )); then
-            echo "Slim release exceeds the 32 MiB safety limit." >&2
+          if (( release_size > 33554432 )); then
+            echo "Release exceeds the 32 MiB safety limit." >&2
             exit 1
           fi
 
-          sha256sum build/release/*.jar
+          cp "$release_jar" build/release/neo-voxy.jar
+          sha256sum build/release/neo-voxy.jar
 
       - name: List generated JARs
+        shell: bash
         run: |
-          echo "=== Intermediate and release JARs ==="
-          ls -lah build/libs/
+          echo "=== Generated JARs ==="
+          find build -maxdepth 3 -type f -name '*.jar' -print
           echo "=== Artifact selected for upload ==="
           ls -lah build/release/
 
@@ -87,6 +97,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: neo-voxy
-          path: build/release/*.jar
+          path: build/release/neo-voxy.jar
           if-no-files-found: error
           compression-level: 0
