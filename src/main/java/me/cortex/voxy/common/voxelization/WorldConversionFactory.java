@@ -9,8 +9,6 @@ import net.minecraft.util.ZeroBitStorage;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.GlobalPalette;
-import net.minecraft.world.level.chunk.HashMapPalette;
-import net.minecraft.world.level.chunk.LinearPalette;
 import net.minecraft.world.level.chunk.Palette;
 import net.minecraft.world.level.chunk.PalettedContainer;
 import net.minecraft.world.level.chunk.PalettedContainerRO;
@@ -19,58 +17,36 @@ import net.minecraft.world.level.chunk.SingleValuePalette;
 public class WorldConversionFactory {
    private static final ThreadLocal<WorldConversionFactory.Cache> THREAD_LOCAL = ThreadLocal.withInitial(WorldConversionFactory.Cache::new);
 
+   private static int mapPaletteState(BlockState state, Reference2IntOpenHashMap<BlockState> blockCache, Mapper mapper) {
+      if (state == null) {
+         return -1;
+      }
+
+      int blockId = blockCache.getOrDefault(state, -1);
+      if (blockId == -1) {
+         blockId = mapper.getIdForBlockState(state);
+         blockCache.put(state, blockId);
+      }
+
+      return blockId;
+   }
+
    private static int setupLocalPalette(Palette<BlockState> vp, Reference2IntOpenHashMap<BlockState> blockCache, Mapper mapper, int[] pc) {
       int c = vp.getSize();
-      if (vp instanceof LinearPalette) {
-         for (int i = 0; i < vp.getSize(); i++) {
-            BlockState state = (BlockState)vp.valueFor(i);
-            int blockId = -1;
-            if (state != null) {
-               blockId = blockCache.getOrDefault(state, -1);
-               if (blockId == -1) {
-                  blockId = mapper.getIdForBlockState(state);
-                  blockCache.put(state, blockId);
-               }
-            }
 
-            pc[i] = blockId;
-         }
-      } else if (vp instanceof HashMapPalette<BlockState> pal) {
-         for (int i = 0; i < vp.getSize(); i++) {
-            BlockState state = null;
-            int blockId = -1;
+      if (vp instanceof SingleValuePalette) {
+         pc[0] = mapPaletteState(vp.valueFor(0), blockCache, mapper);
+         return c;
+      }
 
-            try {
-               state = (BlockState)vp.valueFor(i);
-            } catch (Exception var10) {
-            }
-
-            if (state != null) {
-               blockId = blockCache.getOrDefault(state, -1);
-               if (blockId == -1) {
-                  blockId = mapper.getIdForBlockState(state);
-                  blockCache.put(state, blockId);
-               }
-            }
-
-            pc[i] = blockId;
-         }
-      } else {
-         if (!(vp instanceof SingleValuePalette)) {
-            throw new IllegalStateException("Unknown palette type: " + vp);
+      for (int i = 0; i < c; i++) {
+         BlockState state = null;
+         try {
+            state = vp.valueFor(i);
+         } catch (RuntimeException ignored) {
          }
 
-         int blockId = -1;
-         BlockState state = (BlockState)vp.valueFor(0);
-         if (state != null) {
-            blockId = blockCache.getOrDefault(state, -1);
-            if (blockId == -1) {
-               blockId = mapper.getIdForBlockState(state);
-               blockCache.put(state, blockId);
-            }
-         }
-
-         pc[0] = blockId;
+         pc[i] = mapPaletteState(state, blockCache, mapper);
       }
 
       return c;
