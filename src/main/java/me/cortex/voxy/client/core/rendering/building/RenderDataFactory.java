@@ -51,6 +51,9 @@ public class RenderDataFactory {
     private final MemoryBuffer quadBuffer = new MemoryBuffer(8*(8*(1<<16)));//6 faces + dual direction + translucents
     private final long quadBufferPtr = this.quadBuffer.address;
     private final int[] quadCounters = new int[8];
+    //Set when a bucket filled up and quads were dropped; reported once per build rather than per quad,
+    //since a section that overflows does so thousands of times.
+    private boolean bucketOverflowed;
 
 
     private int minX;
@@ -145,6 +148,21 @@ public class RenderDataFactory {
 
 
             int bufferIdx = type+(type==2?face:0);//Translucent, double side, directional
+            //Buckets 2..7 take one face direction each, so 32*32*32 is their ceiling and the 2^16 slots
+            //are generous. Buckets 0 (translucent) and 1 (double sided) take all six directions, whose
+            //ceiling is three times the slots they have - a section packed with two colours of stained
+            //glass reaches it exactly. Past that the write lands in the next bucket's region, and the
+            //geometry manager packs bucket sizes into 16 bits, so the count wraps to a wrong small
+            //number and corrupts its neighbour's draw parameters as well.
+            //
+            //quadCount is rolled back with the drop: the two counts have to agree, or the last bucket's
+            //reported size covers quads that were never written and the GPU draws whatever was in the
+            //buffer.
+            if (RenderDataFactory.this.quadCounters[bufferIdx] >= (1<<16)) {
+                RenderDataFactory.this.quadCount--;
+                RenderDataFactory.this.bucketOverflowed = true;
+                return;
+            }
             long bufferOffset = (RenderDataFactory.this.quadCounters[bufferIdx]++)*8L + bufferIdx*8L*(1<<16);
             MemoryUtil.memPutLong(RenderDataFactory.this.quadBufferPtr + bufferOffset, quad);
 
@@ -1785,6 +1803,10 @@ public class RenderDataFactory {
 
         //We must reset _everything_ that could have changed as we dont exactly know the state due to how the model id exception
         // throwing system works
+        if (this.bucketOverflowed) {
+            me.cortex.voxy.commonImpl.PerfStats.quadBucketOverflow.increment();
+            this.bucketOverflowed = false;
+        }
         this.quadCount = 0;
 
         {//Reset all the block meshes

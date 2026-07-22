@@ -11,7 +11,6 @@ import me.cortex.voxy.client.core.gl.shader.Shader;
 import me.cortex.voxy.client.core.gl.shader.ShaderLoader;
 import me.cortex.voxy.client.core.gl.shader.ShaderType;
 import me.cortex.voxy.client.core.model.ModelStore;
-import me.cortex.voxy.client.core.rendering.LodBoundaryFade;
 import me.cortex.voxy.client.core.rendering.section.backend.AbstractSectionRenderer;
 import me.cortex.voxy.client.core.rendering.section.geometry.BasicSectionGeometryData;
 import me.cortex.voxy.client.core.rendering.util.DownloadStream;
@@ -170,7 +169,10 @@ public class MDICSectionRenderer extends AbstractSectionRenderer<MDICViewport, B
         MemoryUtil.memPutInt(ptr, viewport.frameId&0x7fffffff); ptr += 4;
         viewport.innerTranslation.getToAddress(ptr); ptr += 4*3;
         MemoryUtil.memPutFloat(ptr, this.fluidDatumY); ptr += 4;
-        var boundary = LodBoundaryFade.getDistances();
+        //std140: these follow fluidDatumY at 96/100/104/108 and round the block to 112. Must stay in
+        //lockstep with SceneUniform in gl46/bindings.glsl - a short write feeds garbage into the enable
+        //flag, which silently toggles the chunk-bounds mask.
+        var boundary = me.cortex.voxy.client.core.rendering.LodBoundaryFade.getDistances();
         MemoryUtil.memPutFloat(ptr, boundary.enabled() ? 1.0f : 0.0f); ptr += 4;
         MemoryUtil.memPutFloat(ptr, boundary.fadeStart()); ptr += 4;
         MemoryUtil.memPutFloat(ptr, boundary.fadeEnd()); ptr += 4;

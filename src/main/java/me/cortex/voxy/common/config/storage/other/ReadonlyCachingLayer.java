@@ -52,6 +52,22 @@ public class ReadonlyCachingLayer extends StorageBackend {
         this.cache.deleteSectionData(key);
     }
 
+    //The cache layer is for sections; aux tables live in the backing store so they survive it
+    @Override
+    public boolean supportsAuxTable(String table) {return this.onMiss.supportsAuxTable(table);}
+
+    @Override
+    public void putAux(String table, long key, byte[] value) {this.onMiss.putAux(table, key, value);}
+
+    @Override
+    public byte[] getAux(String table, long key) {return this.onMiss.getAux(table, key);}
+
+    @Override
+    public void deleteAux(String table, long key) {this.onMiss.deleteAux(table, key);}
+
+    @Override
+    public void forEachAux(String table, AuxEntryConsumer consumer) {this.onMiss.forEachAux(table, consumer);}
+
     @Override
     public void putIdMapping(int id, ByteBuffer data) {
         this.cache.putIdMapping(id, data);

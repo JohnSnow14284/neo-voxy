@@ -126,21 +126,6 @@ public final class DistantTrainProtocol {
         }
     }
 
-    //Client preference sent once on login and again only when settings are applied. The server keeps
-    //it per player so a low-distance client does not force every other player to the same range.
-    public record TrainRenderRequestPayload(boolean enabled, int maxDistanceBlocks) implements CustomPacketPayload {
-        public static final Type<TrainRenderRequestPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath("voxy", "train_render_request"));
-        public static final StreamCodec<ByteBuf, TrainRenderRequestPayload> CODEC = StreamCodec.composite(
-                ByteBufCodecs.BOOL, TrainRenderRequestPayload::enabled,
-                ByteBufCodecs.VAR_INT, TrainRenderRequestPayload::maxDistanceBlocks,
-                TrainRenderRequestPayload::new);
-
-        @Override
-        public Type<? extends CustomPacketPayload> type() {
-            return TYPE;
-        }
-    }
-
     public static ResourceLocation dimensionId(Level level) {
         return level.dimension().location();
     }

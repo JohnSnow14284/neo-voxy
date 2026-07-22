@@ -12,6 +12,9 @@ layout(location = 5) uniform vec4 fogColor;
 layout(location = 6) uniform int fogShape;
 layout(location = 7) uniform float fogIntensity;
 layout(location = 8) uniform float fogDensity;
+//1 while a vision-restricting medium owns the fog (blindness/darkness/water/lava/powder snow). Those
+//bands are vanilla's own linear ramp and the LOD has to match the terrain it borders, so the smoothstep
+//shaping that suits our wide ambient band is dropped.
 layout(location = 9) uniform int linearFog;
 #endif
 #endif
@@ -70,9 +73,9 @@ void main() {
     if (fogIntensity > 0.0){
         float dist = getFragDistance(fogShape, point.xyz);
         float linearAmount = clamp((dist - fogParams.x) / max(fogParams.y - fogParams.x, 0.0001), 0.0, 1.0);
-        float fogLerp = linearFog != 0
-                ? linearAmount
-                : smoothstep(0.0, 1.0, linearAmount);
+        //smoothstep(a,b,d) is by definition smoothstep(0,1,clamp((d-a)/(b-a))), so the ambient branch is
+        //unchanged bit for bit.
+        float fogLerp = linearFog != 0 ? linearAmount : smoothstep(0.0, 1.0, linearAmount);
         if (fogDensity > 0.0) fogLerp = (exp(fogDensity * fogLerp) - 1.0) / (exp(fogDensity) - 1.0);
         colour.rgb = mix(colour.rgb, fogColor.rgb, clamp(fogLerp * fogIntensity, 0.0, 1.0));
     }

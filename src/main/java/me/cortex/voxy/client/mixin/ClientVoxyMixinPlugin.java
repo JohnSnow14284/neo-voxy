@@ -12,13 +12,6 @@ import java.util.List;
 import java.util.Set;
 
 public class ClientVoxyMixinPlugin implements IMixinConfigPlugin {
-    //This experimental depth redirect performs several full-screen depth copies per Sable layer.
-    //Some driver/shader-pack combinations terminate in native code on its first frame, leaving no
-    //Java crash report. Keep the distance/loading integration, but require an explicit JVM opt-in
-    //for this nonessential occlusion enhancement until it can be implemented without framebuffer
-    //attachment aliasing.
-    private static final boolean ENABLE_UNSAFE_SABLE_DEPTH_SHIM =
-            Boolean.getBoolean("voxy.enableUnsafeSableDepthShim");
     private static boolean valkyrienSkiesInstalled;
     private static boolean nvidiumInstalled;
     private static boolean connectorInstalled = false;
@@ -56,9 +49,7 @@ public class ClientVoxyMixinPlugin implements IMixinConfigPlugin {
         if (sableInstalled) {
             mixins.add("minecraft.MixinGameRendererSableRenderDistance");
             mixins.add("sable.MixinSableReacharoundCulling");
-            if (ENABLE_UNSAFE_SABLE_DEPTH_SHIM) {
-                mixins.add("sable.MixinSableDepthShim");
-            }
+            mixins.add("sable.MixinSableDepthShim");
         }
         if (valkyrienSkiesInstalled && !nvidiumInstalled) {
             mixins.add("sodium.MixinSodiumWorldRendererVS");

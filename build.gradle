@@ -305,6 +305,9 @@ java {
 }
 
 jar {
+    // The full nested-dependency archive is only an input to slimJar. Keep it out of build/libs so
+    // users and CI cannot accidentally publish the ~90 MiB intermediate.
+    destinationDirectory.set(layout.buildDirectory.dir("intermediate-jars"))
     from("LICENSE") {
         rename { "${it}_${project.archives_base_name}"}
     }
@@ -315,8 +318,7 @@ jar {
 // trimming native libraries that cannot run on the two supported desktop targets (Windows/Linux
 // x86_64). It also removes the Java-9 module descriptors from the two LWJGL extension jars: on a
 // dedicated server those descriptors require the client-only org.lwjgl module before FML can start.
-def slimJarOutput = layout.buildDirectory.file(
-        "libs/${project.archives_base_name}-${project.version}-slim.jar")
+def slimJarOutput = layout.buildDirectory.file("libs/neo-voxy.jar")
 
 tasks.register('slimJar') {
     group = 'build'

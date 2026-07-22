@@ -68,6 +68,8 @@ public class VoxyCommands {
                         .then(Commands.argument("attemptRepair", BoolArgumentType.bool())
                                 .executes(ctx->verifyTLNs(ctx, BoolArgumentType.getBool(ctx, "attemptRepair"))))
                 )
+                .then(Commands.literal("beacons")
+                        .executes(VoxyCommands::dumpBeacons))
                 .then(Commands.literal("probe")
                         .then(Commands.argument("x", IntegerArgumentType.integer())
                                 .then(Commands.argument("y", IntegerArgumentType.integer())
@@ -79,10 +81,18 @@ public class VoxyCommands {
                                 .executes(ctx -> occlusionCapture(ctx, 20))
                                 .then(Commands.argument("seconds", IntegerArgumentType.integer(1, 120))
                                         .executes(ctx -> occlusionCapture(ctx, IntegerArgumentType.getInteger(ctx, "seconds"))))))
+                .then(Commands.literal("profile")
+                        .executes(ctx -> profile(ctx, 15))
+                        .then(Commands.argument("seconds", IntegerArgumentType.integer(3, 120))
+                                .executes(ctx -> profile(ctx, IntegerArgumentType.getInteger(ctx, "seconds")))))
+                .then(Commands.literal("createmem")
+                        .executes(VoxyCommands::dumpCreateMemory))
                 .then(Commands.literal("kinetics")
                         .executes(VoxyCommands::dumpKinetics))
                 .then(Commands.literal("ship")
                         .executes(VoxyCommands::dumpShipContraptions))
+                .then(Commands.literal("fog")
+                        .executes(VoxyCommands::dumpFog))
                 .then(Commands.literal("perf")
                         .executes(VoxyCommands::dumpPerf)
                         .then(Commands.literal("reset")
@@ -102,6 +112,60 @@ public class VoxyCommands {
     //Live counters for the fork's optimizations - proves they are firing and by how much. Values
     //accumulate across the session; run "/voxy debug perf reset" to zero them and watch a fresh window
     //(e.g. reset, fly across a fresh chunk area, then check the biome/copycat cache hit rate).
+    //Reports what the fog mixin last captured and what finish() would do with it, so a report of
+    //"the LOD ignores blindness" can be pinned to a value rather than guessed at.
+    private static int dumpFog(CommandContext<CommandSourceStack> ctx) {
+        var mc = Minecraft.getInstance();
+        var vrs = me.cortex.voxy.client.core.IGetVoxyRenderSystem.getNullable();
+        var sb = new StringBuilder("voxy fog state:").append(System.lineSeparator());
+        if (vrs == null) {
+            sb.append("  render system: NULL (voxy not rendering)");
+            String outNull = sb.toString();
+            Logger.info(outNull);
+            ctx.getSource().sendSuccess(() -> Component.literal(outNull), false);
+            return 1;
+        }
+        var cam = mc.gameRenderer.getMainCamera();
+        boolean blind = cam.getEntity() instanceof net.minecraft.world.entity.LivingEntity l
+                && l.hasEffect(net.minecraft.world.effect.MobEffects.BLINDNESS);
+        boolean dark = cam.getEntity() instanceof net.minecraft.world.entity.LivingEntity l2
+                && l2.hasEffect(net.minecraft.world.effect.MobEffects.DARKNESS);
+        sb.append(String.format("  pipeline=%s%n", vrs.getPipelineName()));
+        //From inside the render pass, not from here: this command runs on the main thread where the
+        //fog state is whatever the last writer left behind, which is a different moment entirely.
+        sb.append(String.format("  AT RENDER: restrictedDist=%.2f viewDistance=%.1f skipped=%s%n",
+                me.cortex.voxy.client.core.VoxyRenderSystem.getLastRenderFogEnd(),
+                me.cortex.voxy.client.core.VoxyRenderSystem.getLastRenderVanillaFar(),
+                me.cortex.voxy.client.core.VoxyRenderSystem.wasLastRenderSkipped()));
+        sb.append(String.format("  main-thread RenderSystem start=%.2f end=%.2f (informational)%n",
+                com.mojang.blaze3d.systems.RenderSystem.getShaderFogStart(),
+                com.mojang.blaze3d.systems.RenderSystem.getShaderFogEnd()));
+        sb.append(String.format("  TERRAIN FOG AT RENDER: start=%.2f end=%.2f  <-- what sodium's shader uses%n",
+                me.cortex.voxy.client.core.VoxyRenderSystem.getTerrainFogStartAtRender(),
+                me.cortex.voxy.client.core.VoxyRenderSystem.getTerrainFogEndAtRender()));
+        var fade = me.cortex.voxy.client.core.rendering.LodBoundaryFade.getDistances();
+        sb.append(String.format("  CIRCULAR FADE: configEnabled=%s start=%.1f end=%.1f active=%s%n",
+                me.cortex.voxy.client.config.VoxyConfig.CONFIG.enableLodBoundaryFade,
+                fade.fadeStart(), fade.fadeEnd(), fade.enabled()));
+        sb.append(String.format("  ambient fog band: near=%.1f far=%.1f (baseline 32*srd=%.0f, %d%%)%n",
+                (32f * me.cortex.voxy.client.config.VoxyConfig.CONFIG.sectionRenderDistance
+                    * (me.cortex.voxy.client.config.VoxyConfig.CONFIG.fogDistancePercent / 100.0f)) * 0.5f,
+                32f * me.cortex.voxy.client.config.VoxyConfig.CONFIG.sectionRenderDistance
+                    * (me.cortex.voxy.client.config.VoxyConfig.CONFIG.fogDistancePercent / 100.0f),
+                32f * me.cortex.voxy.client.config.VoxyConfig.CONFIG.sectionRenderDistance,
+                me.cortex.voxy.client.config.VoxyConfig.CONFIG.fogDistancePercent));
+        sb.append(String.format("  restrictingMediumPresent=%s%n",
+                me.cortex.voxy.client.core.VoxyRenderSystem.restrictingMediumPresent()));
+        sb.append(String.format("  camera in fluid=%s blindness=%s darkness=%s%n",
+                cam.getFluidInCamera(), blind, dark));
+        sb.append(String.format("  useEnvironmentalFog=%s fogIntensity=%.2f",
+                me.cortex.voxy.client.config.VoxyConfig.CONFIG.useEnvironmentalFog, me.cortex.voxy.client.config.VoxyConfig.CONFIG.fogIntensity));
+        String out = sb.toString();
+        Logger.info(out);
+        ctx.getSource().sendSuccess(() -> Component.literal(out), false);
+        return 1;
+    }
+
     private static int dumpPerf(CommandContext<CommandSourceStack> ctx) {
         ctx.getSource().sendSuccess(() -> Component.literal(me.cortex.voxy.commonImpl.PerfStats.report()), false);
         return 1;
@@ -138,6 +202,85 @@ public class VoxyCommands {
     //Dumps the kinetic snapshot pipeline: config gates, draw counters, queue/sweep state, recent
     //capture attempts (renderer + vertex counts) and the buckets near the camera. Run it standing at
     //a broken machine: it distinguishes captured-nothing / captured-garbage / captured-but-not-drawn.
+    //The beacon index has to be verifiable before anything draws from it, or a missing beam is
+    //ambiguous between "never indexed" and "indexed but not rendered". Persistent=false means the
+    //storage stack has no aux table and the index is memory-only for this session.
+    private static int dumpBeacons(CommandContext<CommandSourceStack> ctx) {
+        var mc = net.minecraft.client.Minecraft.getInstance();
+        var engine = WorldIdentifier.ofEngineNullable(mc.level);
+        if (engine == null) {
+            ctx.getSource().sendFailure(Component.translatable("No voxy world engine for this dimension"));
+            return 1;
+        }
+        var index = engine.getBeaconIndex();
+        var cam = mc.gameRenderer.getMainCamera().getPosition();
+        var sb = new StringBuilder("beacon index: count=").append(index.count())
+                .append(" persistent=").append(index.isPersistent())
+                .append(" | ").append(me.cortex.voxy.client.core.beacon.DistantBeaconRenderer.debugDump())
+                .append('\n');
+        var rows = new java.util.ArrayList<String>();
+        index.forEach((x, y, z) -> {
+            double dx = x - cam.x, dz = z - cam.z;
+            rows.add(String.format("  %d %d %d  (%.0fm)", x, y, z, Math.sqrt(dx * dx + dz * dz)));
+        });
+        java.util.Collections.sort(rows);
+        for (int i = 0; i < Math.min(rows.size(), 32); i++) {
+            sb.append(rows.get(i)).append('\n');
+        }
+        if (rows.size() > 32) {
+            sb.append("  ... ").append(rows.size() - 32).append(" more").append('\n');
+        }
+        String msg = sb.toString();
+        me.cortex.voxy.common.Logger.info("[beacons]\n" + msg);
+        ctx.getSource().sendSuccess(() -> Component.literal(msg), false);
+        return 1;
+    }
+
+    //What the distant Create snapshots cost, split GPU vs CPU source. The ratio is the input to
+    //deciding which subsystems are worth moving to storage.
+    //Opens a timing window and reports it when it closes. Named sections rather than the pipeline's
+    //A..I samplers, and it covers ingest and storage - which is where a report of "every integration is
+    //off and it still drops frames" has to be answered, since those cannot be switched off.
+    private static int profile(CommandContext<CommandSourceStack> ctx, int seconds) {
+        if (me.cortex.voxy.commonImpl.VoxyProfile.isRunning()) {
+            ctx.getSource().sendFailure(Component.literal("A profile is already running"));
+            return 0;
+        }
+        //Timer queries are off by default (they cost a query object per pass per frame), so the window
+        //turns them on for its duration and back off after
+        me.cortex.voxy.client.core.util.GPUTiming.INSTANCE.setEnabled(true);
+        me.cortex.voxy.commonImpl.VoxyProfile.start();
+        ctx.getSource().sendSuccess(() -> Component.literal(
+                "Profiling for " + seconds + "s - fly the route that drops frames"), false);
+        var source = ctx.getSource();
+        var timer = new java.util.Timer("voxy-profile", true);
+        timer.schedule(new java.util.TimerTask() {
+            @Override
+            public void run() {
+                me.cortex.voxy.commonImpl.VoxyProfile.stop();
+                Minecraft.getInstance().execute(() ->
+                        me.cortex.voxy.client.core.util.GPUTiming.INSTANCE.setEnabled(false));
+                String msg = me.cortex.voxy.commonImpl.VoxyProfile.report();
+                me.cortex.voxy.common.Logger.info(msg);
+                //Chat is capped and this table is wide; the log has the readable copy
+                Minecraft.getInstance().execute(() -> source.sendSuccess(() -> Component.literal(msg), false));
+                timer.cancel();
+            }
+        }, seconds * 1000L);
+        return 1;
+    }
+
+    private static int dumpCreateMemory(CommandContext<CommandSourceStack> ctx) {
+        if (!net.neoforged.fml.ModList.get().isLoaded("create")) {
+            ctx.getSource().sendSuccess(() -> Component.literal("create not loaded"), false);
+            return 0;
+        }
+        String msg = me.cortex.voxy.client.compat.create.CreateMemoryReport.dump();
+        me.cortex.voxy.common.Logger.info(msg);
+        ctx.getSource().sendSuccess(() -> Component.literal(msg), false);
+        return 1;
+    }
+
     private static int dumpKinetics(CommandContext<CommandSourceStack> ctx) {
         if (!net.neoforged.fml.ModList.get().isLoaded("create")) {
             ctx.getSource().sendSuccess(() -> Component.literal("create not loaded"), false);
@@ -151,7 +294,8 @@ public class VoxyCommands {
                 .append(" distantKinetics=").append(cfg.distantKinetics)
                 .append(" enclosedCulling=").append(cfg.kineticEnclosedCulling)
                 .append(" reach=").append((int) reach)
-                .append(" lodMax=").append((int) cfg.createRenderDistance(0))
+                .append(" kineticMax=").append((int) cfg.createRenderDistance(cfg.distantKineticMaxChunks))
+                .append(" lodMax=").append((int) cfg.createLodRadius())
                 .append(" sectionsDrawnLastFrame=").append(me.cortex.voxy.client.compat.create.DistantKineticRenderer.lastFrameSectionsDrawn)
                 .append('\n')
                 .append(me.cortex.voxy.client.compat.create.KineticSnapshots.debugDump(cam.x, cam.y, cam.z));
@@ -176,13 +320,13 @@ public class VoxyCommands {
     }
 
     //Dumps the client-side distant-train state: render gates plus every tracked train with sample
-    //age and distance. Zero tracked trains while a moving train is between the vanilla handover and
-    //the configured renderDist means the server is not sampling (old jar, cap, or no voxy server).
+    //age and distance. Zero tracked trains with a moving train 192-3072 blocks away means the
+    //server side is not sampling (old jar or no voxy on the server).
     private static int dumpTrains(CommandContext<CommandSourceStack> ctx) {
         var cfg = me.cortex.voxy.client.config.VoxyConfig.CONFIG;
         var sb = new StringBuilder("distant trains: rendering=").append(cfg.isRenderingEnabled())
                 .append(" distantTrains=").append(cfg.distantTrains)
-                .append(" renderDist=").append((int) cfg.createRenderDistance(cfg.distantTrainMaxChunks))
+                .append(" renderDist=").append((int) (32 * cfg.sectionRenderDistance))
                 .append(" bogeyMeshes=").append(me.cortex.voxy.client.compat.create.DistantTrainRenderer.bogeyMeshProvider != null)
                 .append(" drawnLastFrame=").append(me.cortex.voxy.client.compat.create.DistantTrainRenderer.lastFrameCarriagesDrawn)
                 .append(" shapesReceived=").append(me.cortex.voxy.client.compat.create.DistantTrainManager.shapesReceived)

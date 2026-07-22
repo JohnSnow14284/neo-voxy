@@ -8,9 +8,11 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import org.joml.Matrix4f;
 
+import static org.lwjgl.opengl.GL11C.GL_ALWAYS;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_TEST;
 import static org.lwjgl.opengl.GL11C.GL_EQUAL;
 import static org.lwjgl.opengl.GL11C.GL_KEEP;
+import static org.lwjgl.opengl.GL11C.GL_REPLACE;
 import static org.lwjgl.opengl.GL11C.GL_STENCIL_TEST;
 import static org.lwjgl.opengl.GL11C.glDepthFunc;
 import static org.lwjgl.opengl.GL11C.glDepthMask;
@@ -21,8 +23,8 @@ import static org.lwjgl.opengl.GL20C.glUseProgram;
 import static org.lwjgl.opengl.GL30C.glBindVertexArray;
 
 //Draws the frozen kinetic moving-part snapshots (see KineticSnapshots) inside the LOD pipeline: one
-//mesh per section, vertex-baked light, an LOD-ownership stencil gate and shared depth so LOD terrain
-//occludes them per pixel - machines keep shafts and cogs past render distance, frozen where they were.
+//mesh per section, vertex-baked light, stencil tag 3 and the shared depth so LOD terrain occludes them
+//per pixel - the machines keep their shafts and cogs past the render distance, frozen where they were.
 public final class DistantKineticRenderer implements LodPipelineHooks.Renderer {
     public static volatile int lastFrameSectionsDrawn;
 
@@ -30,7 +32,9 @@ public final class DistantKineticRenderer implements LodPipelineHooks.Renderer {
     //GL buffers, which mid-pipeline would clobber the LOD buffer setup.
     @net.neoforged.bus.api.SubscribeEvent
     public void onClientTick(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {
+        long t = me.cortex.voxy.commonImpl.VoxyProfile.begin();
         KineticSnapshots.tick(Minecraft.getInstance());
+        me.cortex.voxy.commonImpl.VoxyProfile.end("tick/kineticSnapshots", t);
     }
 
     //Horizontal leave-behind: a chunk unloading takes its kinetic BEs with it - freeze them now,
@@ -51,10 +55,10 @@ public final class DistantKineticRenderer implements LodPipelineHooks.Renderer {
     @Override
     public void render(me.cortex.voxy.client.core.AbstractRenderPipeline pipeline, Viewport<?> viewport, int depthFunc) {
         pipeline.setupAndBindOpaque(viewport);
-        this.renderCommon(pipeline, viewport.MVP, viewport.cameraX, viewport.cameraY, viewport.cameraZ, depthFunc);
+        this.renderCommon(pipeline, viewport, viewport.MVP, viewport.cameraX, viewport.cameraY, viewport.cameraZ, depthFunc);
     }
 
-    private void renderCommon(me.cortex.voxy.client.core.AbstractRenderPipeline pipeline, Matrix4f viewProjection,
+    private void renderCommon(me.cortex.voxy.client.core.AbstractRenderPipeline pipeline, Viewport<?> viewport, Matrix4f viewProjection,
                               double camX, double camY, double camZ, int depthFunc) {
         lastFrameSectionsDrawn = 0;
         var sections = KineticSnapshots.sections();
@@ -77,7 +81,7 @@ public final class DistantKineticRenderer implements LodPipelineHooks.Renderer {
         //Pull the gate in by the section half-diagonal so the snapshot owns that band.
         double reach = Math.max(0, mc.options.getEffectiveRenderDistance() * 16.0 - 14.0);
         double reachSq = reach * reach;
-        double maxDist = cfg.createRenderDistance(0);
+        double maxDist = cfg.createRenderDistance(cfg.distantKineticMaxChunks);
         double maxDistSq = maxDist * maxDist;
 
         boolean renderStateActive = false;
@@ -96,6 +100,12 @@ public final class DistantKineticRenderer implements LodPipelineHooks.Renderer {
                 if (distSq < reachSq || distSq > maxDistSq) {
                     continue;
                 }
+                //Before any state setup, so a frame looking away from every machine never binds the
+                //shader at all. Snapshots are captured per 16-block section, hence the cube.
+                if (viewport != null && !DistantVisibility.isBoxVisible(viewport,
+                        ox, oy, oz, ox + 16, oy + 16, oz + 16)) {
+                    continue;
+                }
 
                 if (!renderStateActive) {
                     //Vertex-baked light (per BE), like the track meshes - no light uniform
@@ -109,11 +119,8 @@ public final class DistantKineticRenderer implements LodPipelineHooks.Renderer {
                     //show through, reading as jumbled overlapping models at LOD range
                     org.lwjgl.opengl.GL11C.glDisable(org.lwjgl.opengl.GL11C.GL_CULL_FACE);
                     glEnable(GL_STENCIL_TEST);
-                    //Placed kinetic snapshots belong to the LOD side of the handover. Keeping the
-                    //vanilla ownership bit as a hard gate prevents shader depth reprojection error
-                    //from turning a moving machine's screen-space bounds into a see-through hole.
-                    glStencilFunc(GL_EQUAL, 1, 0x1);
-                    glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+                    glStencilFunc(GL_ALWAYS, 3, 0xFF);
+                    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
                     renderStateActive = true;
                 }
 

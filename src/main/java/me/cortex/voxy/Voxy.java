@@ -59,26 +59,23 @@ public class Voxy {
             // Voxy's Sodium video-settings page is registered by VoxyConfigMenu (@ConfigEntryPointForge,
             // Sodium 0.8 native config API), not here.
 
-            //Vanilla beacon beam sections already contain the exact stained-glass blended colours.
-            //Cache those sparse sections and render their lightweight meshes in the LOD pipeline.
-            var beaconRenderer = me.cortex.voxy.client.compat.beacon.DistantBeaconRenderer.INSTANCE;
-            NeoForge.EVENT_BUS.register(beaconRenderer);
-            me.cortex.voxy.client.compat.LodPipelineHooks.register(beaconRenderer);
-
             // EclipticSeasons compat: rebuild the LOD renderer on season change. Gated on the mod being present
             // so the snow-LOD code (which references EclipticSeasons client classes) never loads without it.
             if (ModList.get().isLoaded("eclipticseasons")) {
                 NeoForge.EVENT_BUS.register(me.cortex.voxy.client.core.compat.eclipticseasons.VoxyEsHandler.INSTANCE);
             }
 
+            //Distant train rendering is Create-free on the client (poses + baked meshes arrive over
+            //our own payloads), so it registers unconditionally. Bogeys go through Create's own
+            //style renderers and need the mod present. Rendering hooks the tail of the LOD pipeline
+            //so LOD terrain depth occludes trains and tracks; the event bus only handles cleanup.
+            var trainRenderer = new me.cortex.voxy.client.compat.create.DistantTrainRenderer();
+            NeoForge.EVENT_BUS.register(trainRenderer);
+            me.cortex.voxy.client.compat.LodPipelineHooks.register(trainRenderer);
+            //Occlusion recorder behind /voxy debug trains occlusion (Create-free)
+            me.cortex.voxy.client.compat.LodPipelineHooks.frameDebugProbe =
+                    me.cortex.voxy.client.compat.create.DistantOcclusionDebug.PROBE;
             if (ModList.get().isLoaded("create")) {
-                // Do not activate any Create render path when Create is absent. Besides keeping the
-                // options accurately disabled, this avoids event/listener overhead in unrelated packs.
-                var trainRenderer = new me.cortex.voxy.client.compat.create.DistantTrainRenderer();
-                NeoForge.EVENT_BUS.register(trainRenderer);
-                me.cortex.voxy.client.compat.LodPipelineHooks.register(trainRenderer);
-                me.cortex.voxy.client.compat.LodPipelineHooks.frameDebugProbe =
-                        me.cortex.voxy.client.compat.create.DistantOcclusionDebug.PROBE;
                 //Bogey snapshot capture touches Create's registries, so it stays behind this gate
                 me.cortex.voxy.client.compat.create.DistantTrainRenderer.bogeyMeshProvider =
                         me.cortex.voxy.client.compat.create.DistantBogeyMeshes::getOrCapture;
@@ -105,13 +102,17 @@ public class Voxy {
                 //Ship-borne kinetics render natively (a ship is one connected drivetrain - copies
                 //cannot keep adjacent shafts in sync); the cull exempts them entirely.
             }
+
+            //Beacon beams derived from the voxel store, so one shows up whether or not its chunk was
+            //ever loaded this session. Vanilla, not create - registered unconditionally.
+            var beaconRenderer = new me.cortex.voxy.client.core.beacon.DistantBeaconRenderer();
+            NeoForge.EVENT_BUS.register(beaconRenderer);
+            me.cortex.voxy.client.compat.LodPipelineHooks.register(beaconRenderer);
         }
     }
 
     private static void registerPayloads(net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) {
-        //Version 2 adds the client -> server per-player train render-distance request. Keep the
-        //registrar optional so mismatched/vanilla servers simply disable this integration.
-        var registrar = event.registrar("2").optional();
+        var registrar = event.registrar("1").optional();
         registrar.playToClient(
                 me.cortex.voxy.commonImpl.compat.create.DistantTrainProtocol.CarriageShapePayload.TYPE,
                 me.cortex.voxy.commonImpl.compat.create.DistantTrainProtocol.CarriageShapePayload.CODEC,
@@ -120,12 +121,6 @@ public class Voxy {
                         ctx.enqueueWork(() -> me.cortex.voxy.client.compat.create.DistantTrainManager.handleShape(payload));
                     }
                 });
-        registrar.playToServer(
-                me.cortex.voxy.commonImpl.compat.create.DistantTrainProtocol.TrainRenderRequestPayload.TYPE,
-                me.cortex.voxy.commonImpl.compat.create.DistantTrainProtocol.TrainRenderRequestPayload.CODEC,
-                (payload, ctx) -> ctx.enqueueWork(() ->
-                        me.cortex.voxy.commonImpl.compat.create.DistantTrainConfig.updatePlayerConfig(
-                                ctx.player().getUUID(), payload.enabled(), payload.maxDistanceBlocks())));
         registrar.playToClient(
                 me.cortex.voxy.commonImpl.compat.create.DistantTrainProtocol.TrainPosesPayload.TYPE,
                 me.cortex.voxy.commonImpl.compat.create.DistantTrainProtocol.TrainPosesPayload.CODEC,

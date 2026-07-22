@@ -19,4 +19,5 @@ public class MixinRenderSystem {
     private static void voxy$injectInit(int debugVerbosity, boolean sync, CallbackInfo ci) {
         VoxyClient.initVoxyClient();
     }
+
 }

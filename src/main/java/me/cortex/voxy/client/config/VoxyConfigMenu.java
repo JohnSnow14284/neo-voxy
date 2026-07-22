@@ -169,11 +169,6 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                                         .setFormatter(v->Component.literal(v + " blocks"))
                                         .setEnabler("voxy:lod_boundary_fade")
                                         .setImpact(OptionImpact.LOW),
-                                new BoolOption(
-                                        "voxy:distant_beacon_beams",
-                                        Component.translatable("voxy.config.general.distantBeaconBeams"),
-                                        ()->CFG.distantBeaconBeams, v->CFG.distantBeaconBeams=v)
-                                        .setImpact(OptionImpact.LOW),
                                 new EnumOption<>(
                                         "voxy:leaf_lod_mode",
                                         VoxyConfig.LeafLodMode.class,
@@ -326,7 +321,7 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                                         "voxy:distant_train_distance",
                                         Component.translatable("voxy.config.compat.distantTrainDistance"),
                                         ()->CFG.distantTrainMaxChunks, v->CFG.distantTrainMaxChunks=v,
-                                        new Range(0, VoxyConfig.MAX_CREATE_DISTANCE_CHUNKS, 8))
+                                        new Range(0, 192, 8))
                                         .setFormatter(VoxyConfigMenu::formatCreateDistance)
                                         .setImpact(OptionImpact.LOW),
                                 new BoolOption(
@@ -338,7 +333,7 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                                         "voxy:distant_track_distance",
                                         Component.translatable("voxy.config.compat.distantTrackDistance"),
                                         ()->CFG.distantTrackMaxChunks, v->CFG.distantTrackMaxChunks=v,
-                                        new Range(0, VoxyConfig.MAX_CREATE_DISTANCE_CHUNKS, 8))
+                                        new Range(0, 192, 8))
                                         .setFormatter(VoxyConfigMenu::formatCreateDistance)
                                         .setImpact(OptionImpact.LOW),
                                 new BoolOption(
@@ -350,7 +345,7 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                                         "voxy:distant_contraption_distance",
                                         Component.translatable("voxy.config.compat.distantContraptionDistance"),
                                         ()->CFG.distantContraptionMaxChunks, v->CFG.distantContraptionMaxChunks=v,
-                                        new Range(0, VoxyConfig.MAX_CREATE_DISTANCE_CHUNKS, 8))
+                                        new Range(0, 192, 8))
                                         .setFormatter(VoxyConfigMenu::formatCreateDistance)
                                         .setImpact(OptionImpact.LOW),
                                 new BoolOption(
@@ -364,6 +359,19 @@ public class VoxyConfigMenu implements ConfigEntryPoint {
                                         ()->CFG.kineticEnclosedCulling, v->CFG.kineticEnclosedCulling=v)
                                         .setImpact(OptionImpact.LOW)
                         ).setEnablerInherit(s->createInstalled), new Group(
+                                new BoolOption(
+                                        "voxy:distant_beacons",
+                                        Component.translatable("voxy.config.compat.distantBeacons"),
+                                        ()->CFG.distantBeacons, v->CFG.distantBeacons=v)
+                                        .setImpact(OptionImpact.LOW),
+                                new IntOption(
+                                        "voxy:distant_beacon_distance",
+                                        Component.translatable("voxy.config.compat.distantBeaconDistance"),
+                                        ()->CFG.distantBeaconMaxChunks, v->CFG.distantBeaconMaxChunks=v,
+                                        new Range(0, 512, 16))
+                                        .setFormatter(VoxyConfigMenu::formatCreateDistance)
+                                        .setImpact(OptionImpact.LOW)
+                        ), new Group(
                                 new BoolOption(
                                         "voxy:es_snow_lod",
                                         Component.translatable("voxy.config.compat.esSnowLod"),

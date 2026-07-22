@@ -29,9 +29,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
+import static org.lwjgl.opengl.GL11C.GL_ALWAYS;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_TEST;
 import static org.lwjgl.opengl.GL11C.GL_EQUAL;
 import static org.lwjgl.opengl.GL11C.GL_KEEP;
+import static org.lwjgl.opengl.GL11C.GL_REPLACE;
 import static org.lwjgl.opengl.GL11C.GL_STENCIL_TEST;
 import static org.lwjgl.opengl.GL11C.glDepthFunc;
 import static org.lwjgl.opengl.GL11C.glDepthMask;
@@ -95,11 +97,11 @@ public final class DistantTrackRenderer implements LodPipelineHooks.Renderer {
         //so occlusion is per-pixel; the iris pipeline uses the shader pack's patched fragment shader.
         pipeline.setupAndBindOpaque(viewport);
         //renderCommon only reads viewProjection (copies via transform.set), never mutates it
-        this.renderCommon(pipeline, viewport.MVP,
+        this.renderCommon(pipeline, viewport, viewport.MVP,
                 viewport.cameraX, viewport.cameraY, viewport.cameraZ, depthFunc);
     }
 
-    private void renderCommon(me.cortex.voxy.client.core.AbstractRenderPipeline pipeline, Matrix4f viewProjection, double camX, double camY, double camZ, int depthFunc) {
+    private void renderCommon(me.cortex.voxy.client.core.AbstractRenderPipeline pipeline, Viewport<?> viewport, Matrix4f viewProjection, double camX, double camY, double camZ, int depthFunc) {
         lastFrameTilesDrawn = 0;
         var cfg = VoxyConfig.CONFIG;
         if (!cfg.isRenderingEnabled() || !cfg.distantTracks) {
@@ -126,12 +128,14 @@ public final class DistantTrackRenderer implements LodPipelineHooks.Renderer {
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(depthFunc);
         glDepthMask(true);
-        //The dedicated track mesh is part of the LOD scene, so it may only replace LOD-owned pixels.
-        //This also gives shader packs a stable occlusion rule: nearby vanilla terrain wins through
-        //the ownership stencil even when its reprojected depth differs slightly from Voxy depth.
+        //Draw everywhere (the pipeline's stencil gate would confine us to sky pixels) but tag every
+        //depth-passing fragment with stencil=3: the sentinel-restore pass and iris's depth-hack both
+        //rewrite only stencil==0 (full mask), so tagged pixels keep our real depth through
+        //SSAO/composite/the vanilla depth handback. Bit0 stays set because the translucent LOD pass
+        //tests EQUAL,1 under mask 0x1 - distant water must still composite in front of the meshes.
         glEnable(GL_STENCIL_TEST);
-        glStencilFunc(GL_EQUAL, 1, 0x1);
-        glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+        glStencilFunc(GL_ALWAYS, 3, 0xFF);
+        glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
         int drawn = 0;
         long nowMs = System.currentTimeMillis();
         boolean occlusionDebug = DistantOcclusionDebug.isActive();
@@ -165,6 +169,15 @@ public final class DistantTrackRenderer implements LodPipelineHooks.Renderer {
                             Math.sqrt(distSq), rawCompiled, compiled && !rawCompiled, vanillaDraws);
                 }
                 if (vanillaDraws) {
+                    continue;
+                }
+                //Rail networks stretch across a map, so the share of track outside the view is high -
+                //higher than for machinery, which clusters where the player built. The mesh carries its
+                //own extent, which for a bezier is the only way to know how far the curve reaches.
+                var m = unit.mesh;
+                if (viewport != null && !DistantVisibility.isBoxVisible(viewport,
+                        unit.ox + m.minX, unit.oy + m.minY, unit.oz + m.minZ,
+                        unit.ox + m.maxX, unit.oy + m.maxY, unit.oz + m.maxZ)) {
                     continue;
                 }
                 transform.set(viewProjection).translate(

@@ -12,13 +12,20 @@ public final class SableShipContent {
 
     //inSubLevel runs for every kinetic visual every frame (the ship exemption inside the distance
     //cull), so the level->container lookup is cached per level instead of re-resolved thousands of
-    //times a frame. Weak on the level so a closed world doesn't linger.
+    //times a frame.
+    //
+    //The weak reference alone does not let a closed world go: the container holds its own strong Level
+    //field, so caching the container pins the level the weak reference is there to release. Leaving the
+    //world takes the level to null, and that path has to clear the cache - returning early there holds
+    //the whole previous level, its chunks and its block entities, until the next world's first call.
     private static java.lang.ref.WeakReference<net.minecraft.client.multiplayer.ClientLevel> cachedLevel = new java.lang.ref.WeakReference<>(null);
     private static ClientSubLevelContainer cachedContainer;
 
     private static ClientSubLevelContainer container() {
         var level = Minecraft.getInstance().level;
         if (level == null) {
+            cachedLevel = new java.lang.ref.WeakReference<>(null);
+            cachedContainer = null;
             return null;
         }
         if (cachedLevel.get() != level) {

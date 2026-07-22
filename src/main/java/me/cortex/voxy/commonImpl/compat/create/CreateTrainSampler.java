@@ -142,7 +142,6 @@ public final class CreateTrainSampler {
     public void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         this.sentShapes.remove(event.getEntity().getUUID());
         this.visibleTrains.remove(event.getEntity().getUUID());
-        DistantTrainConfig.removePlayerConfig(event.getEntity().getUUID());
     }
 
     @SubscribeEvent
@@ -151,7 +150,6 @@ public final class CreateTrainSampler {
         this.visibleTrains.clear();
         this.shapeCache.clear();
         this.failedShapes.clear();
-        DistantTrainConfig.clearPlayerConfigs();
     }
 
     //Contraption.fromNBT deserialization per carriage is heavy; a long train entering the window
@@ -164,11 +162,9 @@ public final class CreateTrainSampler {
     private void sample(MinecraftServer server) {
         this.shapeBuildsThisRound = 0;
         var players = server.getPlayerList().getPlayers();
-        //Every client supplies its own preference. A dedicated server may additionally impose the
-        //uniform voxy-server.toml ceiling; an integrated server follows its host's client setting.
-        boolean applyServerCeiling = server.isDedicatedServer();
-        if (players.isEmpty() || (applyServerCeiling && !DistantTrainConfig.serverEnabled)
-                || Create.RAILWAYS.trains.isEmpty()) {
+        //DistantTrainConfig combines the client's preference (integrated server) with the dedicated
+        //server's uniform ceiling (voxy-server.toml); either side disabling it stops streaming.
+        if (players.isEmpty() || !DistantTrainConfig.enabled() || Create.RAILWAYS.trains.isEmpty()) {
             if (!this.visibleTrains.isEmpty()) {
                 //Flush removals for anyone who still has meshes
                 for (var player : players) {
@@ -184,8 +180,11 @@ public final class CreateTrainSampler {
         var trains = new ArrayList<>(Create.RAILWAYS.trains.values());
         lastTrainsSeen = trains.size();
         int posePacketsSent = 0;
-        //Each player's stream window is computed below as their requested render distance, optionally
-        //clamped by the dedicated-server ceiling. Streaming a band the client never draws is pure waste.
+        //Stream window ceiling = min(client render distance, dedicated-server ceiling), clamped to the
+        //hard max. On the integrated server it shrinks to what the host draws; on a dedicated server it
+        //is the voxy-server.toml ceiling. Streaming a band the client never draws is pure waste.
+        double streamMax = DistantTrainConfig.maxDistance();
+        double streamMaxSq = streamMax * streamMax;
         //A carriage's world pose (anchor + yaw/pitch + bogey poses) depends only on (train, carriage,
         //dimension), not on the observing player - but the anchors and buildBogeyPoses were recomputed
         //once per PLAYER. Memoize the CarriagePose per (shapeId, dimension) for this sample round so N
@@ -193,18 +192,10 @@ public final class CreateTrainSampler {
         //handing the same instance to every player's packet is safe. Cleared implicitly each round.
         Map<PoseKey, CarriagePose> poseRoundCache = new java.util.HashMap<>();
         for (ServerPlayer player : players) {
-            UUID playerId = player.getUUID();
-            if (!DistantTrainConfig.enabled(playerId, applyServerCeiling)) {
-                Set<UUID> previouslyVisible = this.visibleTrains.remove(playerId);
-                this.sendRemovals(player, previouslyVisible, Set.of());
-                continue;
-            }
-            double streamMax = DistantTrainConfig.maxDistance(playerId, applyServerCeiling);
-            double streamMaxSq = streamMax * streamMax;
             var playerDim = player.level().dimension();
             var playerPos = player.position();
             var nowVisible = new HashSet<UUID>();
-            var shapesByTrain = this.sentShapes.computeIfAbsent(playerId, k -> new ConcurrentHashMap<>());
+            var shapesByTrain = this.sentShapes.computeIfAbsent(player.getUUID(), k -> new ConcurrentHashMap<>());
             double minDist = minSendDistance(server, player);
 
             for (Train train : trains) {
@@ -268,7 +259,7 @@ public final class CreateTrainSampler {
                 }
             }
 
-            var previouslyVisible = this.visibleTrains.put(playerId, nowVisible);
+            var previouslyVisible = this.visibleTrains.put(player.getUUID(), nowVisible);
             this.sendRemovals(player, previouslyVisible, nowVisible);
         }
         lastPosePacketsSent = posePacketsSent;
@@ -449,9 +440,8 @@ public final class CreateTrainSampler {
         var dim = player.level().dimension();
         var pos = player.position();
         double minDist = minSendDistance(player.serverLevel().getServer(), player);
-        boolean applyServerCeiling = player.serverLevel().getServer().isDedicatedServer();
-        double streamMax = DistantTrainConfig.maxDistance(player.getUUID(), applyServerCeiling);
-        sb.append("\n distantTrains=").append(DistantTrainConfig.enabled(player.getUUID(), applyServerCeiling))
+        double streamMax = DistantTrainConfig.maxDistance();
+        sb.append("\n distantTrains=").append(DistantTrainConfig.enabled())
                 .append(" interval=").append(DistantTrainConfig.sampleInterval()).append("t")
                 .append(" window=[").append((int) minDist).append(", ").append((int) streamMax)
                 .append("] (min=view-derived, max=min(client,server))");

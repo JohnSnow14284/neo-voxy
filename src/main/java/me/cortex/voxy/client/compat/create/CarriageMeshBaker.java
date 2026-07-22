@@ -154,7 +154,17 @@ public final class CarriageMeshBaker {
             }
         }
 
-        var mesh = builder.build();
+        //build() owns the staging buffer only once it returns; a throw on the way through leaves the
+        //memAlloc'd buffer with no owner, and this runs every tick for a contraption that keeps failing.
+        //KineticSnapshots.rebake already guards its build the same way.
+        DistantMesh mesh;
+        try {
+            mesh = builder.build();
+        } catch (Throwable t) {
+            builder.discard();
+            me.cortex.voxy.common.Logger.error("Distant carriage bake failed for " + blocks.size() + " blocks", t);
+            return null;
+        }
         if (mesh == null) {
             me.cortex.voxy.common.Logger.error("Distant carriage bake produced no geometry from " + blocks.size() + " blocks");
             return null;

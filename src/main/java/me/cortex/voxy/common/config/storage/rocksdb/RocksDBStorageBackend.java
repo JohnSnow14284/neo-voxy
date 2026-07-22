@@ -16,13 +16,20 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.LongConsumer;
 
 public class RocksDBStorageBackend extends StorageBackend {
+    private static final String WORLD_SECTIONS_CF = "world_sections";
+    private static final String ID_MAPPINGS_CF = "id_mappings";
+
     private final RocksDB db;
     private final ColumnFamilyHandle worldSections;
     private final ColumnFamilyHandle idMappings;
+    //Aux families by cf name, opened from what the store already held and extended on first write
+    private final Map<String, ColumnFamilyHandle> auxHandles = new HashMap<>();
     private final ReadOptions sectionReadOps;
     private final WriteOptions sectionWriteOps;
 
@@ -76,11 +83,17 @@ public class RocksDBStorageBackend extends StorageBackend {
                 .setFilterPolicy(filter)
         );
 
-        final List<ColumnFamilyDescriptor> cfDescriptors = Arrays.asList(
-            new ColumnFamilyDescriptor(RocksDB.DEFAULT_COLUMN_FAMILY, cfOpts),
-            new ColumnFamilyDescriptor("world_sections".getBytes(), cfWorldSecOpts),
-            new ColumnFamilyDescriptor("id_mappings".getBytes(), cfOpts)
-        );
+        //Every column family present on disk has to be named at open time or RocksDB refuses the whole
+        //database with "Column families not opened: <name>" - so a store written by a build that knows
+        //one more family than this one would be unopenable rather than merely missing a feature. Ask the
+        //store what it holds and open all of it; the ones we have no use for cost an unread handle.
+        final List<ColumnFamilyDescriptor> cfDescriptors = new ArrayList<>();
+        cfDescriptors.add(new ColumnFamilyDescriptor(RocksDB.DEFAULT_COLUMN_FAMILY, cfOpts));
+        cfDescriptors.add(new ColumnFamilyDescriptor(WORLD_SECTIONS_CF.getBytes(), cfWorldSecOpts));
+        cfDescriptors.add(new ColumnFamilyDescriptor(ID_MAPPINGS_CF.getBytes(), cfOpts));
+        for (String extra : listExtraColumnFamilies(path)) {
+            cfDescriptors.add(new ColumnFamilyDescriptor(extra.getBytes(), cfOpts));
+        }
 
         final DBOptions options = new DBOptions()
                 //.setUnorderedWrite(true)
@@ -117,12 +130,139 @@ public class RocksDBStorageBackend extends StorageBackend {
             this.closeList.add(bCache);
             this.closeList.addAll(handles);
 
+            //Handles come back positionally against cfDescriptors, and the two we use are added there
+            //before any discovered family, so these indices hold whatever else the store contains.
             this.worldSections = handles.get(1);
             this.idMappings = handles.get(2);
+
+            //Discovered families past the known three, in the order they were appended above. Aux tables
+            //the store already carries have to land here or a reopen would create a second family under
+            //a name that already exists.
+            for (int i = 3; i < cfDescriptors.size(); i++) {
+                this.auxHandles.put(new String(cfDescriptors.get(i).getName()), handles.get(i));
+            }
 
             this.db.flushWal(true);
         } catch (RocksDBException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    //Aux tables are column families named "aux_<table>". They are created on open when the store already
+    //has them and on demand when it does not, so a world gains one the first time something writes to it
+    //rather than on every open.
+    private static String auxCfName(String table) {
+        return "aux_" + table;
+    }
+
+    private ColumnFamilyHandle auxHandle(String table, boolean createIfAbsent) {
+        String name = auxCfName(table);
+        synchronized (this.auxHandles) {
+            ColumnFamilyHandle existing = this.auxHandles.get(name);
+            if (existing != null || !createIfAbsent) {
+                return existing;
+            }
+            try {
+                var handle = this.db.createColumnFamily(
+                        new ColumnFamilyDescriptor(name.getBytes(), new ColumnFamilyOptions()
+                                .setCompressionType(CompressionType.ZSTD_COMPRESSION)
+                                .optimizeForSmallDb()));
+                this.auxHandles.put(name, handle);
+                this.closeList.add(handle);
+                return handle;
+            } catch (RocksDBException e) {
+                throw new RuntimeException("Creating aux column family " + name, e);
+            }
+        }
+    }
+
+    @Override
+    public boolean supportsAuxTable(String table) {
+        return true;
+    }
+
+    @Override
+    public void putAux(String table, long key, byte[] value) {
+        long t = me.cortex.voxy.commonImpl.VoxyProfile.begin();
+        try {
+            //Aux entries are derived data and regenerate on re-ingest like sections do, but they are far
+            //rarer than section writes, so they take the WAL rather than a shutdown-time flush.
+            this.db.put(this.auxHandle(table, true), longKey(key), value);
+        } catch (RocksDBException e) {
+            throw new RuntimeException("Writing aux entry", e);
+        } finally {
+            me.cortex.voxy.commonImpl.VoxyProfile.end("storage/putAux", t);
+        }
+    }
+
+    @Override
+    public byte[] getAux(String table, long key) {
+        var handle = this.auxHandle(table, false);
+        if (handle == null) {
+            return null;
+        }
+        try {
+            return this.db.get(handle, longKey(key));
+        } catch (RocksDBException e) {
+            throw new RuntimeException("Reading aux entry", e);
+        }
+    }
+
+    @Override
+    public void deleteAux(String table, long key) {
+        var handle = this.auxHandle(table, false);
+        if (handle == null) {
+            return;
+        }
+        try {
+            this.db.delete(handle, longKey(key));
+        } catch (RocksDBException e) {
+            throw new RuntimeException("Deleting aux entry", e);
+        }
+    }
+
+    @Override
+    public void forEachAux(String table, AuxEntryConsumer consumer) {
+        var handle = this.auxHandle(table, false);
+        if (handle == null) {
+            return;
+        }
+        try (var iter = this.db.newIterator(handle)) {
+            for (iter.seekToFirst(); iter.isValid(); iter.next()) {
+                byte[] key = iter.key();
+                if (key.length != 8) {
+                    continue;
+                }
+                consumer.accept(ByteBuffer.wrap(key).getLong(0), iter.value());
+            }
+        }
+    }
+
+    private static byte[] longKey(long key) {
+        return ByteBuffer.allocate(8).putLong(0, key).array();
+    }
+
+    //Families the store holds beyond the ones this build uses. A store that does not exist yet, or that
+    //cannot be read here, yields nothing: open() is then creating it, and createMissingColumnFamilies
+    //puts the known set in place.
+    private static List<String> listExtraColumnFamilies(String path) {
+        if (!new File(path).exists()) {
+            return List.of();
+        }
+        try (var probeOpts = new Options()) {
+            List<String> extras = new ArrayList<>();
+            for (byte[] name : RocksDB.listColumnFamilies(probeOpts, path)) {
+                String cf = new String(name);
+                if (cf.equals(new String(RocksDB.DEFAULT_COLUMN_FAMILY))
+                        || cf.equals(WORLD_SECTIONS_CF) || cf.equals(ID_MAPPINGS_CF)) {
+                    continue;
+                }
+                extras.add(cf);
+            }
+            return extras;
+        } catch (RocksDBException e) {
+            //Not a readable store - let open() produce the real error instead of masking it here
+            return List.of();
         }
     }
 

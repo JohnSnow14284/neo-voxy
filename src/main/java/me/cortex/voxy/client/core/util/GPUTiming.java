@@ -75,9 +75,14 @@ public class GPUTiming {
                 float time = (float) (((double)delta)/1_000_000);
                 this.timings[i-1] = Math.max(this.timings[i-1]*0.99f+time*0.01f, time);
                 this.lables[i-1] = meta[i-1];
+                //Raw per-pass time to the profiler, not the rolling max kept above: a window wants the
+                //average over its frames, and the rolling value never comes back down after a spike
+                me.cortex.voxy.commonImpl.VoxyProfile.recordGpuMillis(
+                        meta[i-1] == null ? ("pass" + (i-1)) : meta[i-1], time);
                 current = next;
             }
         });
+        me.cortex.voxy.commonImpl.VoxyProfile.noteGpuFrame();
         this.timingSet.tick();
     }
 

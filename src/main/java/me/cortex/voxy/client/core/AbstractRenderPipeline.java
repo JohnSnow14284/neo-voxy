@@ -4,7 +4,6 @@ import me.cortex.voxy.client.RenderStatistics;
 import me.cortex.voxy.client.TimingStatistics;
 import me.cortex.voxy.client.VoxyClient;
 import me.cortex.voxy.client.core.model.ModelBakerySubsystem;
-import me.cortex.voxy.client.core.rendering.LodBoundaryFade;
 import me.cortex.voxy.client.core.rendering.Viewport;
 import me.cortex.voxy.client.core.rendering.hierachical.AsyncNodeManager;
 import me.cortex.voxy.client.core.rendering.hierachical.HierarchicalOcclusionTraverser;
@@ -149,8 +148,7 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
         glBindFramebuffer(GL_FRAMEBUFFER, sourceFrameBuffer);
     }
 
-    protected void initDepthStencil(Viewport<?> viewport, int sourceFrameBuffer, int targetFb,
-                                    int srcWidth, int srcHeight, int width, int height) {
+    protected void initDepthStencil(Viewport<?> viewport, int sourceFrameBuffer, int targetFb, int srcWidth, int srcHeight, int width, int height) {
         glClearNamedFramebufferfi(targetFb, GL_DEPTH_STENCIL, 0, this.properties.clearDepth(), 1);
         // using blit to copy depth from mismatched depth formats is not portable so instead a full screen pass is performed for a depth copy
         // the mismatched formats in this case is the d32 to d24s8
@@ -174,8 +172,6 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
         glBindTextureUnit(0, depthTexture);
         glBindSampler(0, DEPTH_SAMPLER);
         glUniform2f(1,((float)width)/srcWidth, ((float)height)/srcHeight);
-
-        var boundary = LodBoundaryFade.getDistances();
         INVERSE_MVP.set(viewport.vanillaProjection)
                 .mul(viewport.modelView)
                 .invert()
@@ -194,6 +190,7 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
         //sides share the one clip-control mode, and only z is affected by it
         glUniform4f(4, ndcRemapScale, ndcRemapBias,
                 1.0f / ndcRemapScale, -ndcRemapBias / ndcRemapScale);
+        var boundary = me.cortex.voxy.client.core.rendering.LodBoundaryFade.getDistances();
         glUniform1f(6, boundary.fadeStart());
         glUniform1f(7, boundary.fadeEnd());
         glUniform1i(10, 0);
@@ -202,16 +199,17 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
         this.depthStencilSetup.blit();
 
         if (boundary.enabled() && this.useBoundaryGuardPass()) {
-            // Keep stencil=1 (LOD ownership), but restore a slightly relaxed
-            // source surface depth only in the dither-selected transition
-            // pixels. Nearby LOD can replace it; missing/coarse LOD cannot
-            // expose caves or terrain far behind the vanilla surface.
+            //Second pass over the same shader, stencil writes masked off: the dithered LOD-won pixels
+            //in the band keep stencil=1 but trade the cleared FAR depth for the vanilla surface pushed
+            //slightly outward. Without it those pixels read as empty to HiZ and stop occluding the
+            //pre-translucent hook geometry, which ignores stencil and tests depth alone.
             glStencilMask(0x00);
             glUniform1i(10, 1);
             this.depthStencilSetup.blit();
             glUniform1i(10, 0);
             glStencilMask(0xFF);
         }
+
 
         glDepthFunc(this.properties.closerEqualDepthCompare());
         glColorMask(true,true,true,true);
@@ -224,12 +222,10 @@ public abstract class AbstractRenderPipeline extends TrackedObject {
         glStencilFunc(GL_EQUAL, 1, 0x1);
     }
 
-    /**
-     * The normal pipeline composites from a cleared private colour target, so selected fade pixels
-     * need a conservative vanilla-depth guard when their LOD geometry is missing. Iris writes into
-     * an already-populated G-buffer instead: a missing LOD pixel naturally retains vanilla colour,
-     * while the same guard can reject coarse LOD for the whole transition band and cause a pop.
-     */
+    //The normal pipeline composites from a cleared private colour target, so a band pixel whose LOD
+    //geometry is missing would show through to nothing - hence the guard depth. Iris draws into an
+    //already-populated gbuffer where a missing LOD pixel simply keeps vanilla's colour, and applying
+    //the guard there rejects coarse LOD across the whole band instead.
     protected boolean useBoundaryGuardPass() {
         return true;
     }

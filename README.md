@@ -6,7 +6,7 @@ Neo-Voxy is an unofficial NeoForge port and compatibility-focused fork of
 [Voxy](https://github.com/MCRcortex/voxy). It currently has separate branches for Minecraft
 **1.21.1** and **26.1.2**.
 
-Maintained by **JohnSnow**. Repository: [NHblock-Johnsnow/neo-voxy](https://github.com/NHblock-Johnsnow/neo-voxy).
+Maintained by **NHblock714**.
 
 > [!CAUTION]
 > **Do not enable Neo-Voxy's circular LOD fade together with a shader pack that already implements
@@ -17,10 +17,9 @@ Maintained by **JohnSnow**. Repository: [NHblock-Johnsnow/neo-voxy](https://gith
 ## 简体中文
 
 Neo-Voxy 为远距离地形提供高性能 LOD 渲染，并针对 NeoForge、Sodium、Iris 以及部分大型模组
-进行兼容性维护，由 **JohnSnow** 维护。仓库：[NHblock-Johnsnow/neo-voxy](https://github.com/NHblock-Johnsnow/neo-voxy)。两个 Minecraft 分支分别构建，**JAR 与缓存不能跨版本混用**。
-所有“机械动力”“Sable”“节气”等模组联动功能均来自**NHblock714**，该版本是建立在其基础上进行新增功能，例如平滑LOD、Fakesight集成和模拟殖民地支持。
-### 版本与功能对比
+进行兼容性维护，由 **NHblock714** 维护。两个 Minecraft 分支分别构建，**JAR 与缓存不能跨版本混用**。
 
+### 版本与功能对比
 
 | 功能 | 1.21.1 | 26.1.2 | 说明 |
 |---|:---:|:---:|---|
@@ -39,6 +38,7 @@ Neo-Voxy 为远距离地形提供高性能 LOD 渲染，并针对 NeoForge、Sod
 | 树叶 LOD 质量模式 | ✅ | — | 快速、平衡、质量三档 |
 | FakeSight 风格扩展区块请求 | ✅ | — | 移动时限流，静止时逐步扩展至目标距离 |
 | 远距离玩家与乘骑物 | ✅ | — | 可选轻量快照、名称与位置共享 |
+| 远距离信标光柱 | ✅ | — | 从持久化 LOD 数据恢复位置、颜色与遮挡分段 |
 | 专项模组模型兼容 | ✅ | — | 详见下方兼容性表格 |
 | 性能诊断命令 | ✅ | — | 包含帧阶段、GPU 标记和阻塞诊断 |
 
@@ -51,7 +51,7 @@ Neo-Voxy 为远距离地形提供高性能 LOD 渲染，并针对 NeoForge、Sod
 | Sodium | ✅ 0.8.12 | ✅ 0.9.1 | 目标版本；不建议跨大版本使用 |
 | Iris | ✅ 1.8.12+ | ✅ 1.11.2 | 光影包需要自行适配远景渲染语义 |
 | Create | ✅ 6.0.10 专项 | 基础兼容 | 1.21.1 提供远景列车、轨道、动态结构及动力部件交接 |
-| Sable | ✅ 2.0.3 专项 | 无专项实现 | 保留远景载具加载与距离扩展；高风险联合深度重定向默认关闭 |
+| Sable | ⚠️ 2.0.3 专项 | 无专项实现 | 保留远景载具加载与距离扩展；高风险联合深度重定向默认关闭 |
 | Domum Ornamentum | ✅ 专项 | 无专项实现 | 按方块实体材质数据缓存独立颜色与轻量模型 |
 | Supplementaries / Lumisene | ✅ 专项 | 无专项实现 | 专用流体颜色、透明度及表面模型处理 |
 | EclipticSeasons | ✅ 0.13.8.4.1 专项 | 无专项实现 | 季节积雪 LOD 与季节变化后的可选重载 |
@@ -71,7 +71,7 @@ Neo-Voxy 为远距离地形提供高性能 LOD 渲染，并针对 NeoForge、Sod
 
 | 分支 | Neo-Voxy 版本 | Java | NeoForge |
 |---|---|---:|---|
-| Minecraft 1.21.1 | 0.3.1 | 21 | 21.1.x |
+| Minecraft 1.21.1 | 0.3.2 | 21 | 21.1.x |
 | Minecraft 26.1.2 | 0.2.18-beta | 25 | 26.1.2.x |
 
 ### 构建
@@ -81,8 +81,8 @@ Neo-Voxy 为远距离地形提供高性能 LOD 渲染，并针对 NeoForge、Sod
 ```
 
 1.21.1 分支已将发布包裁剪整合为 Gradle 的 `slimJar` 任务。执行 `build` 会自动生成
-`build/libs/neo-voxy-0.3.1-slim.jar`，不再需要 Python 或 `tools` 目录。该发布包仅保留
-Windows/Linux x86_64 原生库；未带 `-slim` 的大体积 JAR 仅用于构建检查。
+`build/libs/neo-voxy.jar`，不再需要 Python 或 `tools` 目录。该发布包仅保留
+Windows/Linux x86_64 原生库；大体积中间 JAR 存放在 `build/intermediate-jars`，不会出现在发布目录。
 
 Create、Sable、EclipticSeasons 等联动所需的公开编译依赖由 Gradle 自动下载。Create 内嵌的
 Ponder/Flywheel 以及 Sable 内嵌的 companion/Rapier 也会自动提取，因此全新检出和 CI 均不需要
@@ -113,6 +113,7 @@ NeoForge, Sodium, Iris, and selected large mods. The two Minecraft branches are 
 | Leaf LOD quality modes | ✅ | — | Fast, Balanced, and Quality modes |
 | FakeSight-style extended chunk requests | ✅ | — | Throttled while moving and expanded gradually while stationary |
 | Distant players and ridden vehicles | ✅ | — | Optional lightweight snapshots, names, and position sharing |
+| Distant beacon beams | ✅ | — | Restores position, colour, and occlusion segments from persistent LOD data |
 | Dedicated mod model integrations | ✅ | — | See the compatibility table below |
 | Performance diagnostics | ✅ | — | Frame stages, GPU markers, and stall diagnostics |
 
@@ -126,7 +127,7 @@ mod cannot run alongside basic terrain LOD rendering.
 | Sodium | ✅ 0.8.12 | ✅ 0.9.1 | Target versions; crossing major versions is not recommended |
 | Iris | ✅ 1.8.12+ | ✅ 1.11.2 | Shader packs must understand distant-terrain rendering semantics |
 | Create | ✅ 6.0.10 integration | Basic only | 1.21.1 adds distant trains, tracks, contraptions, and kinetic handoff |
-| Sable | ✅ 2.0.3 integration | No dedicated support | Distant loading/range remains; unsafe combined-depth redirection is off by default |
+| Sable | ⚠️ 2.0.3 integration | No dedicated support | Distant loading/range remains; unsafe combined-depth redirection is off by default |
 | Domum Ornamentum | ✅ Integrated | No dedicated support | Cached block-entity material colours and lightweight independent models |
 | Supplementaries / Lumisene | ✅ Integrated | No dedicated support | Dedicated fluid colour, transparency, and surface handling |
 | EclipticSeasons | ✅ 0.13.8.4.1 integration | No dedicated support | Seasonal snow LOD and optional reload on season changes |
@@ -146,7 +147,7 @@ not register its listeners, renderers, or recurring work, and the matching setti
 
 | Branch | Neo-Voxy version | Java | NeoForge |
 |---|---|---:|---|
-| Minecraft 1.21.1 | 0.3.1 | 21 | 21.1.x |
+| Minecraft 1.21.1 | 0.3.2 | 21 | 21.1.x |
 | Minecraft 26.1.2 | 0.2.18-beta | 25 | 26.1.2.x |
 
 ### Building
@@ -156,9 +157,9 @@ not register its listeners, renderers, or recurring work, and the matching setti
 ```
 
 The 1.21.1 branch now implements release trimming as the Gradle `slimJar` task. `build` automatically
-creates `build/libs/neo-voxy-0.3.1-slim.jar`; Python and the `tools` directory are no longer needed.
-The release JAR keeps only Windows/Linux x86_64 natives. The large JAR without `-slim` is retained
-only as an intermediate build artifact.
+creates `build/libs/neo-voxy.jar`; Python and the `tools` directory are no longer needed.
+The release JAR keeps only Windows/Linux x86_64 natives. The large intermediate JAR is kept under
+`build/intermediate-jars` and never appears in the release directory.
 
 Gradle automatically downloads the public compile-time dependencies required by the Create, Sable,
 EclipticSeasons, and other integrations. It also extracts Create's embedded Ponder/Flywheel and

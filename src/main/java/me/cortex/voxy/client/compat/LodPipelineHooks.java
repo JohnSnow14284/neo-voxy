@@ -75,7 +75,11 @@ public final class LodPipelineHooks {
             }
             for (Renderer renderer : RENDERERS) {
                 try {
+                    //Named per renderer so a report can say which integration costs what - including
+                    //saying that a disabled one costs nothing, which is the case that needs proving
+                    long t = me.cortex.voxy.commonImpl.VoxyProfile.begin();
                     renderer.render(pipeline, viewport, depthFunc);
+                    me.cortex.voxy.commonImpl.VoxyProfile.end("render/" + renderer.getClass().getSimpleName(), t);
                 } catch (Throwable e) {
                     if (!errored) {
                         errored = true;

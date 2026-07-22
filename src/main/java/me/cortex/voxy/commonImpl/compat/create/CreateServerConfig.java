@@ -22,19 +22,13 @@ public final class CreateServerConfig {
                      "trains for anyone on this server (zero train bandwidth).")
             .define("distantTrainsEnabled", true);
 
-    public static final ModConfigSpec.BooleanValue LIMIT_TRAIN_STREAM_DISTANCE = BUILDER
-            .comment("Apply a server-wide upper limit to every client's distant train range.",
-                     "Disabled by default so clients can follow their own LOD distance. Enable this",
-                     "before setting maxTrainStreamChunks when bandwidth needs a uniform cap.")
-            .define("limitTrainStreamDistance", false);
-
     public static final ModConfigSpec.IntValue MAX_TRAIN_STREAM_CHUNKS = BUILDER
             .comment("Uniform ceiling, in chunks, for how far the server streams train poses to any",
                      "client. Lower cuts bandwidth for everyone; a client asking for less still gets",
-                     "less. 0 means no additional server cap: each client follows its own configured",
-                     "LOD/train distance. Bandwidth scales with the streamed area, so set a positive",
-                     "value when the server needs a uniform upper limit.")
-            .defineInRange("maxTrainStreamChunks", 0, 0, 2048);
+                     "less. Around 32 matches a default client LOD radius - streaming farther than a",
+                     "client draws is wasted. Bandwidth scales with the streamed area, so this is the",
+                     "main lever.")
+            .defineInRange("maxTrainStreamChunks", 128, 8, 192);
 
     public static final ModConfigSpec.IntValue SAMPLE_INTERVAL_TICKS = BUILDER
             .comment("Ticks between train pose samples (server-wide). Higher = proportionally less",
@@ -65,9 +59,7 @@ public final class CreateServerConfig {
     private static void push() {
         DistantTrainConfig.updateServerConfig(
                 DISTANT_TRAINS_ENABLED.get(),
-                LIMIT_TRAIN_STREAM_DISTANCE.get()
-                        ? MAX_TRAIN_STREAM_CHUNKS.get() * 16.0
-                        : DistantTrainConfig.HARD_MAX,
+                MAX_TRAIN_STREAM_CHUNKS.get() * 16.0,
                 SAMPLE_INTERVAL_TICKS.get());
     }
 }

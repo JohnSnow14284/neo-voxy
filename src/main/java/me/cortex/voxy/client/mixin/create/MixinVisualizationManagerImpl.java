@@ -21,10 +21,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 //here through FlwApiLink, and injecting the interface static proved unreliable.
 @Mixin(value = VisualizationManagerImpl.class, remap = false)
 public class MixinVisualizationManagerImpl {
-    @org.spongepowered.asm.mixin.Unique
-    private static final boolean voxy$unsafeDepthShimEnabled =
-            Boolean.getBoolean("voxy.enableUnsafeSableDepthShim");
-
     @Inject(method = "supportsVisualization", at = @At("HEAD"), cancellable = true)
     private static void voxy$bypassDuringCapture(LevelAccessor level, CallbackInfoReturnable<Boolean> cir) {
         if (me.cortex.voxy.client.compat.create.KineticSnapshots.isCapturingOnThisThread()) {
@@ -46,7 +42,7 @@ public class MixinVisualizationManagerImpl {
     private void voxy$beginCombinedDepth(RenderContext context, CallbackInfo ci) {
         //Shader packs only: without one, renderToVanillaDepth already writes LOD depth into the depth
         //buffer this pass tests against, and the wrap's five fullscreen depth passes buy nothing
-        this.voxy$depthWrapped = voxy$unsafeDepthShimEnabled && IrisUtil.irisShaderPackEnabled()
+        this.voxy$depthWrapped = IrisUtil.irisShaderPackEnabled()
                 && !IrisUtil.irisShadowActive() && ShipBorne.anyShipPresent();
         if (this.voxy$depthWrapped) {
             //In-place variant: Iris rebinds framebuffers inside this pass, which silently evicted the

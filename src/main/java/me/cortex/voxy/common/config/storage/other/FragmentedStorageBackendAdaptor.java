@@ -99,6 +99,36 @@ public class FragmentedStorageBackendAdaptor extends StorageBackend {
         this.backends[this.getSegmentId(key)].deleteSectionData(key);
     }
 
+    //Routed by the same segment id as setSectionData, so a key always lands in one shard; iteration
+    //has to visit them all because a table's keys are spread across every backend.
+    @Override
+    public boolean supportsAuxTable(String table) {
+        for (var backend : this.backends) {
+            if (!backend.supportsAuxTable(table)) return false;
+        }
+        return true;
+    }
+
+    @Override
+    public void putAux(String table, long key, byte[] value) {
+        this.backends[this.getSegmentId(key)].putAux(table, key, value);
+    }
+
+    @Override
+    public byte[] getAux(String table, long key) {return this.backends[this.getSegmentId(key)].getAux(table, key);}
+
+    @Override
+    public void deleteAux(String table, long key) {
+        this.backends[this.getSegmentId(key)].deleteAux(table, key);
+    }
+
+    @Override
+    public void forEachAux(String table, AuxEntryConsumer consumer) {
+        for (var backend : this.backends) {
+            backend.forEachAux(table, consumer);
+        }
+    }
+
     @Override
     public void putIdMapping(int id, ByteBuffer data) {
         //Replicate the mappings over all the dbs to mean the chance of recovery in case of corruption is 30x

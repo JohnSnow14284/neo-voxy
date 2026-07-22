@@ -14,10 +14,12 @@ import org.joml.Math;
 
 import java.util.List;
 
+import static org.lwjgl.opengl.GL11C.GL_ALWAYS;
 import static org.lwjgl.opengl.GL11C.GL_CULL_FACE;
 import static org.lwjgl.opengl.GL11C.GL_DEPTH_TEST;
 import static org.lwjgl.opengl.GL11C.GL_EQUAL;
 import static org.lwjgl.opengl.GL11C.GL_KEEP;
+import static org.lwjgl.opengl.GL11C.GL_REPLACE;
 import static org.lwjgl.opengl.GL11C.GL_STENCIL_TEST;
 import static org.lwjgl.opengl.GL11C.glDepthFunc;
 import static org.lwjgl.opengl.GL11C.glDepthMask;
@@ -48,11 +50,11 @@ public final class DistantTrainRenderer implements LodPipelineHooks.Renderer {
         //bogeys still go through vanilla-style buffers, which cannot, so they skip there for now.
         pipeline.setupAndBindOpaque(viewport);
         //renderCommon only reads viewProjection (copies via transform.set), never mutates it
-        this.renderCommon(pipeline, viewport.MVP,
+        this.renderCommon(pipeline, viewport, viewport.MVP,
                 viewport.cameraX, viewport.cameraY, viewport.cameraZ, depthFunc);
     }
 
-    private void renderCommon(me.cortex.voxy.client.core.AbstractRenderPipeline pipeline, Matrix4f viewProjection, double camX, double camY, double camZ, int depthFunc) {
+    private void renderCommon(me.cortex.voxy.client.core.AbstractRenderPipeline pipeline, Viewport<?> viewport, Matrix4f viewProjection, double camX, double camY, double camZ, int depthFunc) {
         lastFrameCarriagesDrawn = 0;
         if (DistantTrainManager.isEmpty()) {
             return;
@@ -139,6 +141,22 @@ public final class DistantTrainRenderer implements LodPipelineHooks.Renderer {
                         track.lightSampledAtMs = nowMs;
                     }
 
+                    //A carriage rotates with its track, so its model-local box cannot be used directly -
+                    //the widest extent is taken as a radius instead, which no rotation can exceed. Also
+                    //covers the bogeys drawn just below, which sit at the same place.
+                    if (viewport != null) {
+                        var cm = entry.mesh().mesh;
+                        float r = Math.max(
+                                Math.max(Math.max(Math.abs(cm.minX), Math.abs(cm.maxX)),
+                                         Math.max(Math.abs(cm.minY), Math.abs(cm.maxY))),
+                                Math.max(Math.abs(cm.minZ), Math.abs(cm.maxZ)));
+                        if (!DistantVisibility.isBoxVisible(viewport,
+                                camX + dx - r, camY + dy - r, camZ + dz - r,
+                                camX + dx + r, camY + dy + r, camZ + dz + r)) {
+                            continue;
+                        }
+                    }
+
                     if (!renderStateActive) {
                         DistantShaders.forPipeline(pipeline, true).bind();
                         DistantShaders.bindTextures();
@@ -146,12 +164,13 @@ public final class DistantTrainRenderer implements LodPipelineHooks.Renderer {
                         glDepthFunc(depthFunc);
                         glDepthMask(true);
                         glDisable(GL_CULL_FACE);
-                        //Only draw into pixels owned by the LOD pipeline. Vanilla-owned pixels use
-                        //a separately reprojected depth which some shader packs compare differently;
-                        //writing there caused distant trains to expose the terrain behind them.
+                        //Depth-passing fragments get stencil=3: the sentinel-restore pass and
+                        //iris's depth-hack (both full-mask stencil==0) leave our depth intact,
+                        //while bit0 stays set so translucent LOD (EQUAL,1 mask 0x1) still
+                        //composites distant water in front of us
                         glEnable(GL_STENCIL_TEST);
-                        glStencilFunc(GL_EQUAL, 1, 0x1);
-                        glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+                        glStencilFunc(GL_ALWAYS, 3, 0xFF);
+                        glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
                         renderStateActive = true;
                     }
 

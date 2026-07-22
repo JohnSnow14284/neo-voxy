@@ -1,9 +1,5 @@
 package me.cortex.voxy.commonImpl.compat.create;
 
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-
 //Control point for distant-train pose streaming, read by the server-side CreateTrainSampler. Holds no
 //client-type references, so the sampler can read it on any dist without dragging in client classes.
 //Two independent inputs are combined:
@@ -21,7 +17,7 @@ public final class DistantTrainConfig {
     private DistantTrainConfig() {}
 
     //Absolute ceiling the sampler will never exceed regardless of either input.
-    public static final double HARD_MAX = 32768;
+    public static final double HARD_MAX = 3072;
 
     //Client (integrated-server host) preference.
     public static volatile boolean clientEnabled = true;
@@ -31,12 +27,6 @@ public final class DistantTrainConfig {
     public static volatile boolean serverEnabled = true;
     public static volatile double serverMaxDistance = HARD_MAX;
     public static volatile int sampleIntervalTicks = 5;
-
-    //A dedicated server receives one preference when a client joins and whenever that client applies
-    //its Voxy settings. No polling and no per-tick config reads: the sampler only performs one map
-    //lookup per player per sampling round. Older clients fall back to the legacy/global values above.
-    private record ClientPreference(boolean enabled, double maxDistance) {}
-    private static final Map<UUID, ClientPreference> PLAYER_PREFERENCES = new ConcurrentHashMap<>();
 
     private static double clampDistance(double blocks) {
         return blocks > 0 ? Math.min(blocks, HARD_MAX) : HARD_MAX;
@@ -53,22 +43,6 @@ public final class DistantTrainConfig {
         sampleIntervalTicks = Math.max(1, intervalTicks);
     }
 
-    public static void updatePlayerConfig(UUID playerId, boolean enabled, double maxDistanceBlocks) {
-        if (playerId != null) {
-            PLAYER_PREFERENCES.put(playerId, new ClientPreference(enabled, clampDistance(maxDistanceBlocks)));
-        }
-    }
-
-    public static void removePlayerConfig(UUID playerId) {
-        if (playerId != null) {
-            PLAYER_PREFERENCES.remove(playerId);
-        }
-    }
-
-    public static void clearPlayerConfigs() {
-        PLAYER_PREFERENCES.clear();
-    }
-
     //Combined values the sampler reads.
     public static boolean enabled() {
         return clientEnabled && serverEnabled;
@@ -76,27 +50,6 @@ public final class DistantTrainConfig {
 
     public static double maxDistance() {
         return Math.min(clientMaxDistance, serverMaxDistance);
-    }
-
-    public static boolean enabled(UUID playerId, boolean applyServerCeiling) {
-        ClientPreference preference = PLAYER_PREFERENCES.get(playerId);
-        //On a dedicated server, no request means the client either lacks this protocol revision or
-        //cannot render Create trains. Do not waste a full-LOD pose stream on it. The integrated host
-        //can safely fall back to the in-JVM client values during the short login handshake window.
-        if (preference == null && applyServerCeiling) {
-            return false;
-        }
-        boolean requested = preference != null ? preference.enabled() : clientEnabled;
-        return requested && (!applyServerCeiling || serverEnabled);
-    }
-
-    public static double maxDistance(UUID playerId, boolean applyServerCeiling) {
-        ClientPreference preference = PLAYER_PREFERENCES.get(playerId);
-        if (preference == null && applyServerCeiling) {
-            return 0.0;
-        }
-        double requested = preference != null ? preference.maxDistance() : clientMaxDistance;
-        return applyServerCeiling ? Math.min(requested, serverMaxDistance) : requested;
     }
 
     public static int sampleInterval() {

@@ -14,7 +14,6 @@ import me.cortex.voxy.commonImpl.WorldIdentifier;
 import me.cortex.voxy.commonImpl.compat.DomumOrnamentumCompat;
 import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.LightLayer;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.chunk.DataLayer;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
@@ -26,9 +25,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 public class VoxelIngestService {
     private static final ThreadLocal<VoxelizedSection> SECTION_CACHE = ThreadLocal.withInitial(VoxelizedSection::createEmpty);
     private final Service service;
-    private record IngestSection(int cx, int cy, int cz, WorldEngine world, LevelChunk chunk,
-                                 BlockEntity[] domumBlockEntities, LevelChunkSection section,
-                                 DataLayer blockLight, DataLayer skyLight){}
+    private record IngestSection(int cx, int cy, int cz, WorldEngine world, LevelChunk chunk, LevelChunkSection section, DataLayer blockLight, DataLayer skyLight){}
     private final ConcurrentLinkedDeque<IngestSection> ingestQueue = new ConcurrentLinkedDeque<>();
 
     public VoxelIngestService(ServiceManager pool) {
@@ -39,12 +36,18 @@ public class VoxelIngestService {
         var task = this.ingestQueue.pop();
 
         var section = task.section;
+        long tIngest = me.cortex.voxy.commonImpl.VoxyProfile.begin();
         try {
             //Inside the try: the queue holds a world ref per task and the finally below releases it, so
             //anything that can throw has to be covered or the world can never be closed again
-            DomumOrnamentumCompat.beginSection(
-                    task.world.getMapper(), task.domumBlockEntities, task.section, task.cy);
-            me.cortex.voxy.commonImpl.compat.CreateCopycatCompat.beginSection(task.world.getMapper(), task.chunk, task.section, task.cy);
+            DomumOrnamentumCompat.beginSection(task.world.getMapper(), task.world.storage, task.chunk, task.section, task.cx, task.cy, task.cz);
+            me.cortex.voxy.commonImpl.compat.CreateCopycatCompat.beginSection(task.world.getMapper(), task.world.storage, task.chunk, task.section, task.cx, task.cy, task.cz);
+            //Read off the section rather than the chunk's block entities: sections streamed by VSS arrive
+            //with no chunk at all, and a beacon is a block whether or not its block entity is here.
+            long tBeacon = me.cortex.voxy.commonImpl.VoxyProfile.begin();
+            me.cortex.voxy.common.world.other.BeaconScanner.scan(
+                    task.world.getBeaconIndex(), section, task.cx, task.cy, task.cz);
+            me.cortex.voxy.commonImpl.VoxyProfile.end("ingest/beaconScan", tBeacon);
             var vs = SECTION_CACHE.get().setPosition(task.cx, task.cy, task.cz);
 
             if (section.hasOnlyAir() && task.blockLight==null && task.skyLight==null) {//If the chunk section has lighting data, propagate it
@@ -70,6 +73,7 @@ public class VoxelIngestService {
             //on a laggy system cannot let the idle cleaner close the world out from under its own
             //pending ingests
             task.world.releaseRef();
+            me.cortex.voxy.commonImpl.VoxyProfile.end("ingest/section", tIngest);
         }
     }
 
@@ -118,10 +122,6 @@ public class VoxelIngestService {
 
         engine.markActive();
 
-        // Domum entities are captured and grouped once per chunk on the caller thread. Previously
-        // every vertical section job traversed the complete block-entity map again on a worker.
-        var domumBlockEntities = DomumOrnamentumCompat.captureBlockEntitiesBySection(chunk);
-
         var lightingProvider = chunk.getLevel().getLightEngine();
         boolean gotLighting = false;
 
@@ -145,8 +145,7 @@ public class VoxelIngestService {
                 i++;
                 if (section == null || !shouldIngestSection(section, chunk.getPos().x, i, chunk.getPos().z)) continue;
                 engine.acquireRef();
-                this.ingestQueue.add(new IngestSection(chunk.getPos().x, i, chunk.getPos().z, engine, chunk,
-                        domumBlockEntities.forSection(i), section, null, null));
+                this.ingestQueue.add(new IngestSection(chunk.getPos().x, i, chunk.getPos().z, engine, chunk, section, null, null));
                 try {
                     this.service.execute();
                 } catch (Exception e) {
@@ -194,8 +193,7 @@ public class VoxelIngestService {
             //    continue;
             //}
             engine.acquireRef();
-            this.ingestQueue.add(new IngestSection(chunk.getPos().x, i, chunk.getPos().z, engine, chunk,
-                    domumBlockEntities.forSection(i), section, bl, sl));//TODO: fixme, this is technically not safe todo on the chunk load ingest, we need to copy the section data so it cant be modified while being read
+            this.ingestQueue.add(new IngestSection(chunk.getPos().x, i, chunk.getPos().z, engine, chunk, section, bl, sl));//TODO: fixme, this is technically not safe todo on the chunk load ingest, we need to copy the section data so it cant be modified while being read
             try {
                 this.service.execute();
             } catch (Exception e) {
@@ -239,8 +237,7 @@ public class VoxelIngestService {
 
     private boolean rawIngest0(WorldEngine engine, LevelChunk chunk, LevelChunkSection section, int x, int y, int z, DataLayer bl, DataLayer sl) {
         engine.acquireRef();
-        BlockEntity[] domumBlockEntities = DomumOrnamentumCompat.captureBlockEntities(chunk, section);
-        this.ingestQueue.add(new IngestSection(x, y, z, engine, chunk, domumBlockEntities, section, bl, sl));
+        this.ingestQueue.add(new IngestSection(x, y, z, engine, chunk, section, bl, sl));
         try {
             this.service.execute();
             return true;
@@ -248,6 +245,38 @@ public class VoxelIngestService {
             //Task stays queued; shutdown's queue drain releases its ref exactly once
             Logger.error("Executing had an error: assume shutting down, aborting",e);
             return false;
+        }
+    }
+
+    //Sections that arrive without an owning chunk - VSS streams them from the server, so the client has
+    //no LevelChunk and no block entities to read. This signature is what VSS 0.2.8 resolves by reflection
+    //to install its column consumer; it registers the consumer inside the same try as the lookup, so the
+    //lookup failing takes the whole server-fed ingest path with it rather than just this call.
+    public static boolean rawIngest(WorldIdentifier id, LevelChunkSection section, int x, int y, int z, DataLayer bl, DataLayer sl) {
+        return rawIngest(id, recoverChunk(id, x, z), section, x, y, z, bl, sl);
+    }
+
+    //The variant compats read a section's block entities to re-register Domum and copycat materials, and
+    //bail with no chunk - so a section arriving without one publishes plain block ids OVER voxels that
+    //already carried their dressing, and that write goes to disk. A server-fed section is not required
+    //to be a chunk the client lacks: the sender covers a radius that overlaps what is loaded here.
+    //
+    //The dimension key is checked rather than assuming the client is where the section is for. This pack
+    //runs sable sub-levels and generated mirror_* dimensions, so the active level is often not the one an
+    //engine belongs to, and a chunk fetched from the wrong level would decorate with the wrong materials.
+    //No match, or nothing loaded there, leaves the chunk null and the section undressed - what it was.
+    private static LevelChunk recoverChunk(WorldIdentifier id, int chunkX, int chunkZ) {
+        if (id == null) {
+            return null;
+        }
+        if (!net.neoforged.fml.loading.FMLEnvironment.dist.isClient()) {
+            return null;
+        }
+        try {
+            //Named only here, so this class never resolves a client type on a dedicated server
+            return me.cortex.voxy.client.ClientChunkRecovery.find(id, chunkX, chunkZ);
+        } catch (Throwable ignored) {
+            return null;
         }
     }
 
@@ -263,6 +292,11 @@ public class VoxelIngestService {
 
     public static boolean rawIngest(WorldEngine engine, LevelChunk chunk, LevelChunkSection section, int x, int y, int z, DataLayer bl, DataLayer sl) {
         if (!shouldIngestSection(section, x, y, z)) return false;
+        if (chunk == null) {
+            me.cortex.voxy.commonImpl.PerfStats.sectionIngestedChunkless.increment();
+        } else {
+            me.cortex.voxy.commonImpl.PerfStats.sectionIngestedWithChunk.increment();
+        }
         if (engine.instanceIn == null) return false;
         if (!engine.instanceIn.isIngestEnabled(null)) return false;//TODO: dont pass in null
         return engine.instanceIn.getIngestService().rawIngest0(engine, chunk, section, x, y, z, bl, sl);

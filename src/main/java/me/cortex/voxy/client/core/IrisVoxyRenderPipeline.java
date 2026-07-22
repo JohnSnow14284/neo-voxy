@@ -134,13 +134,6 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
     }
 
     @Override
-    protected boolean useBoundaryGuardPass() {
-        // Iris targets already contain the vanilla G-buffer. Let every dither-selected pixel accept
-        // available LOD immediately; if geometry is unavailable, the existing vanilla colour stays.
-        return false;
-    }
-
-    @Override
     protected void postOpaquePreTranslucent(Viewport<?> viewport, int sourceFrameBuffer) {
         if (this.shaderDepthHackFixTransformBlit != null) {
             this.fb.bind();
@@ -320,4 +313,9 @@ public class IrisVoxyRenderPipeline extends AbstractRenderPipeline {
         return this.data.resolutionScale;
     }
 
+
+    @Override
+    protected boolean useBoundaryGuardPass() {
+        return false;
+    }
 }

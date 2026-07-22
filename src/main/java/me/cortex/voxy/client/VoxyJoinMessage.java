@@ -17,9 +17,8 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 public final class VoxyJoinMessage {
     public static final VoxyJoinMessage INSTANCE = new VoxyJoinMessage();
 
-    private static final String REPO = "https://github.com/NHblock-Johnsnow/neo-voxy";
-    private static final String REPO_LABEL = "NHblock-Johnsnow/neo-voxy";
-    private static final String MAINTAINER = "JohnSnow";
+    private static final String REPO = "https://github.com/NHblock714/voxy";
+    private static final String MAINTAINER = "NHblock";
     private static final String QQ_GROUP = "1098491849";
     private static final int DELAY_TICKS = 20;
 
@@ -73,7 +72,7 @@ public final class VoxyJoinMessage {
     }
 
     private static Component repo() {
-        var link = Component.literal(REPO_LABEL).withStyle(style -> style
+        var link = Component.literal(REPO).withStyle(style -> style
                 .withColor(ChatFormatting.AQUA)
                 .withUnderlined(true)
                 .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, REPO))

@@ -40,6 +40,9 @@ public class WorldEngine {
     }
 
     public Mapper getMapper() {return this.mapper;}
+
+    private final me.cortex.voxy.common.world.other.BeaconIndex beaconIndex;
+    public me.cortex.voxy.common.world.other.BeaconIndex getBeaconIndex() {return this.beaconIndex;}
     public boolean isLive() {return this.isLive;}
 
     public final @Nullable VoxyInstance instanceIn;
@@ -60,6 +63,7 @@ public class WorldEngine {
 
         this.storage = storage;
         this.mapper = new Mapper(this.storage);
+        this.beaconIndex = new me.cortex.voxy.common.world.other.BeaconIndex(this.storage);
         //5 cache size bits means that the section tracker has 32 separate maps that it uses
         this.sectionTracker = new ActiveSectionTracker(6, storage::loadSection, cacheSize, this);
     }

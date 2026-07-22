@@ -7,6 +7,8 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import me.cortex.voxy.common.config.section.SectionStorage;
+import me.cortex.voxy.commonImpl.compat.DisguiseStore;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.neoforged.neoforge.client.model.data.ModelData;
@@ -32,6 +34,7 @@ import java.util.function.Predicate;
 //getMaterial() and quietly fall through (future work). Contraption meshes read the material from
 //the captured block entity nbt instead (see materialFromContraptionNbt).
 public final class CreateCopycatCompat {
+    public static final String DISGUISE_TABLE = "disguise_copycat";
     public static final String VARIANT_TYPE = "create_copycat";
 
     private static final boolean LOADED = CopycatCommon.isLoaded();
@@ -78,14 +81,27 @@ public final class CreateCopycatCompat {
         return CopycatCommon.isCopycatState(state);
     }
 
-    public static void beginSection(Mapper mapper, LevelChunk chunk, LevelChunkSection section, int sectionY) {
+    public static void beginSection(Mapper mapper, SectionStorage storage, LevelChunk chunk, LevelChunkSection section, int sectionX, int sectionY, int sectionZ) {
         if (!LOADED) {
             return;
         }
         SectionMappings mappings = SECTION_MAPPINGS.get();
         mappings.reset();
-        if (mapper == null || chunk == null || section == null || chunk.getBlockEntities().isEmpty()
-                || !section.maybeHas(COPYCAT_STATE_PREDICATE)) return;
+        //No block entities to ask - a section streamed from the server, or a chunk that has gone. The
+        //materials were recorded the last time they COULD be read, so use those instead of publishing
+        //plain ids over a build that was dressed. Without this a camouflaged build reverts to bare
+        //skeleton exactly where it is most visible: out at LOD range, where the client never loads the
+        //chunk and only a server-fed section ever arrives.
+        if (mapper == null || section == null) return;
+        if (chunk == null || chunk.getBlockEntities().isEmpty()) {
+            if (section.maybeHas(COPYCAT_STATE_PREDICATE)) {
+                int restored = DisguiseStore.load(storage, DISGUISE_TABLE, sectionX, sectionY, sectionZ,
+                        mappings::put);
+                mappings.active = restored != 0;
+            }
+            return;
+        }
+        if (!section.maybeHas(COPYCAT_STATE_PREDICATE)) return;
 
         int minY = sectionY << 4;
         int maxY = minY + 15;
@@ -153,6 +169,23 @@ public final class CreateCopycatCompat {
         } catch (Throwable ignored) {
         }
         mappings.active = mappings.touchedCount != 0;
+        //Recorded while the block entities are readable, which is the only moment the material can be
+        //derived at all. Rewritten whole per section, so a block that stopped being disguised leaves
+        //with the re-scan that no longer sees it.
+        if (storage != null) {
+            if (mappings.touchedCount == 0) {
+                DisguiseStore.clear(storage, DISGUISE_TABLE, sectionX, sectionY, sectionZ);
+            } else {
+                int[] packed = new int[mappings.touchedCount * 2];
+                for (int i = 0; i < mappings.touchedCount; i++) {
+                    int index = mappings.touched[i];
+                    packed[i * 2] = index;
+                    packed[i * 2 + 1] = mappings.ids[index];
+                }
+                DisguiseStore.save(storage, DISGUISE_TABLE, sectionX, sectionY, sectionZ,
+                        packed, mappings.touchedCount);
+            }
+        }
     }
 
     public static void endSection() {
@@ -219,7 +252,7 @@ public final class CreateCopycatCompat {
         }
         try {
             ModelData modelData = buildModelData(material);
-            return new DomumOrnamentumCompat.BakePlan(modelData, null, material, -1, false, false);
+            return new DomumOrnamentumCompat.BakePlan(modelData, null, material, -1, false);
         } catch (Throwable ignored) {
             return DomumOrnamentumCompat.BakePlan.empty();
         }

@@ -38,6 +38,21 @@ public class DelegatingStorageAdaptor extends StorageBackend {
     }
 
     @Override
+    public boolean supportsAuxTable(String table) {return this.delegate.supportsAuxTable(table);}
+
+    @Override
+    public void putAux(String table, long key, byte[] value) {this.delegate.putAux(table, key, value);}
+
+    @Override
+    public byte[] getAux(String table, long key) {return this.delegate.getAux(table, key);}
+
+    @Override
+    public void deleteAux(String table, long key) {this.delegate.deleteAux(table, key);}
+
+    @Override
+    public void forEachAux(String table, AuxEntryConsumer consumer) {this.delegate.forEachAux(table, consumer);}
+
+    @Override
     public void putIdMapping(int id, ByteBuffer data) {
         this.delegate.putIdMapping(id, data);
     }

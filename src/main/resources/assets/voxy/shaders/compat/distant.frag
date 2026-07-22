@@ -29,16 +29,10 @@ layout(location = 0) out vec4 outColour;
 #endif
 
 void main() {
-    #ifdef SOLID_COLOR
-    //The beacon LOD uses the exact vanilla-computed section colour as fColor. Its lightweight
-    //opaque core must not depend on the animated texture's low-alpha edge texels.
-    vec4 colour = vec4(1.0);
-    #else
     vec4 colour = texture(uAtlas, fUv);
     if (colour.a < 0.1) {
         discard;
     }
-    #endif
     #ifdef PATCHED_SHADER
     //Shader packs light voxy geometry themselves (directional sky light etc.); pre-multiplying the
     //vanilla face shade here double-darkens - visible as black undersides on floating track spans.

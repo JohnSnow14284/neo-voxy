@@ -35,9 +35,8 @@ public class VoxyCommon {
                     .findFirst()
                     .map(m -> m.getVersion().toString())
                     .orElse("<UNKNOWN>");
-            // The published version is already unique. Appending a placeholder commit made Sodium's
-            // configuration page display "unknown" even for normal release builds.
-            MOD_VERSION = version;
+            String commit = "unknown";
+            MOD_VERSION = version + "-" + commit;
             IS_DEDICATED_SERVER = FMLLoader.getDist() == Dist.DEDICATED_SERVER;
             Serialization.init();
         }

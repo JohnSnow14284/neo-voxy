@@ -48,6 +48,8 @@ public class VoxyUniforms {
     public static void addUniforms(UniformHolder uniforms) {
         uniforms
                 .uniform1i(PER_FRAME, "vxRenderDistance", ()->Math.round(VoxyConfig.CONFIG.sectionRenderDistance*32))//In chunks
+                // Used by the injected Iris terrain-cutout and shadow shaders. These must be
+                // registered even though the opaque LOD handoff itself uses the stencil pass.
                 .uniform1f(PER_FRAME, "voxyLodBoundaryFadeStart", () -> LodBoundaryFade.getDistances().fadeStart())
                 .uniform1f(PER_FRAME, "voxyLodBoundaryFadeEnd", () -> LodBoundaryFade.getDistances().fadeEnd())
                 .uniformMatrix(PER_FRAME, "vxViewProj", VoxyUniforms::getViewProjection)

@@ -38,6 +38,15 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 final class FarEntityRenderer {
+    // Some modded vehicles inspect incomplete client-side state from their passenger acceptance hook.
+    // Count failures instead of logging every frame; a missing pose must not take down the render loop.
+    private static final java.util.concurrent.atomic.LongAdder FAR_MOUNT_ERRORS =
+            new java.util.concurrent.atomic.LongAdder();
+
+    public static long farMountErrors() {
+        return FAR_MOUNT_ERRORS.sum();
+    }
+
     private static final float WALK_ANIMATION_SCALE = 0.4F;
     private static final AtomicInteger NEXT_PROXY_ID = new AtomicInteger(1_000_000_000);
     private final FarPlayerTracker tracker;
@@ -155,8 +164,12 @@ final class FarEntityRenderer {
                         this.activeProxyVehicles.add(tracked.vehicleUuid());
                     }
                     if (player != null && player.getVehicle() != vehicle) {
-                        if (player.isPassenger()) player.stopRiding();
-                        player.startRiding(vehicle);
+                        try {
+                            if (player.isPassenger()) player.stopRiding();
+                            player.startRiding(vehicle);
+                        } catch (Throwable ignored) {
+                            FAR_MOUNT_ERRORS.increment();
+                        }
                     }
                     if (!useLiveVehicle && this.renderedProxyVehicles.add(tracked.vehicleUuid())) {
                         poseStack.pushPose();

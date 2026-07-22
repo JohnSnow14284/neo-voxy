@@ -81,31 +81,13 @@ public class VoxyRenderSystem {
     private final AbstractRenderPipeline pipeline;
     private final RenderProperties properties;
 
-    // Fog parameters captured before modification by MixinFogRenderer, for Voxy's own fog pass
-    private float capturedFogStart;
-    private float capturedFogEnd;
-    private final float[] capturedFogColor = new float[4];
-    private int capturedFogShape;
-    private boolean capturedRestrictiveFog;
     private final int[] savedBufferBindings = new int[10];
     private final int[] viewportDimensions = new int[4];
     private final Matrix4f projectionScratch = new Matrix4f();
     private final Matrix4f modifiedProjectionScratch = new Matrix4f();
 
-    public void setCapturedFog(float fogStart, float fogEnd, float[] fogColor, int fogShape,
-                               boolean restrictiveFog) {
-        this.capturedFogStart = fogStart;
-        this.capturedFogEnd = fogEnd;
-        System.arraycopy(fogColor, 0, this.capturedFogColor, 0, 4);
-        this.capturedFogShape = fogShape;
-        this.capturedRestrictiveFog = restrictiveFog;
-    }
 
-    public float getCapturedFogStart() { return this.capturedFogStart; }
-    public float getCapturedFogEnd()   { return this.capturedFogEnd; }
-    public float[] getCapturedFogColor() { return this.capturedFogColor; }
-    public int getCapturedFogShape() { return this.capturedFogShape; }
-    public boolean hasCapturedRestrictiveFog() { return this.capturedRestrictiveFog; }
+    public String getPipelineName() { return this.pipeline == null ? "none" : this.pipeline.getClass().getSimpleName(); }
 
     private static AbstractSectionRenderer.Factory<?,? extends IGeometryData> getRenderBackendFactory() {
         //TODO: need todo a thing where selects optimal section render based on if supports the pipeline and geometry data type
@@ -258,6 +240,118 @@ public class VoxyRenderSystem {
         return viewport;
     }
 
+    //Blindness and darkness are supposed to take the world away, and vanilla does that by collapsing
+    //fog to a few blocks. The LOD is drawn into its own target with its own fog, so vanilla's collapse
+    //never reaches it and the distant world stayed lit behind a black foreground. Rather than trying to
+    //reproduce vanilla's band on our side, just do not draw: the whole point of the effect is that there
+    //is nothing to see. Sits above the pipeline split, so it covers the shader path too, where our fog
+    //uniforms do not even exist.
+    //
+    //The fog end is checked as well as the effect, because darkness ramps in over 22 ticks
+    //(MobEffects.DARKNESS is registered with setBlendDuration(22)) and vanilla lerps its fog from the
+    //full far plane down. For about a second at each end of the pulse the effect is present while
+    //vanilla is still drawing everything - dropping the LOD then would blink the distant world out
+    //while the near world stayed bright. Waiting for vanilla's own band to close keeps the two in step.
+    //Live test for a medium that takes vision away. Asked of the camera every frame rather than read
+    //from a stored value: a cached one that stops being refreshed strands, and a stranded WATER state
+    //tints every LOD in the world blue after surfacing.
+    //Only the mob effects, not fluids. Vanilla's fluid fogs are fixed distances - water 96*waterVision,
+    //lava 1.0, powder snow 2.0 - so none of them scale off farPlaneDistance and none of them need the
+    //render-distance inputs neutralised. Including fluids there would also clip LOD geometry underwater,
+    //since getDepthFar is the projection far plane and the LOD reaches well past vanilla's.
+    public static boolean visionEffectPresent() {
+        var mc = Minecraft.getInstance();
+        if (mc.gameRenderer == null) {
+            return false;
+        }
+        return mc.gameRenderer.getMainCamera().getEntity()
+                    instanceof net.minecraft.world.entity.LivingEntity living
+                && (living.hasEffect(net.minecraft.world.effect.MobEffects.BLINDNESS)
+                    || living.hasEffect(net.minecraft.world.effect.MobEffects.DARKNESS));
+    }
+
+    public static boolean restrictingMediumPresent() {
+        var mc = Minecraft.getInstance();
+        if (mc.gameRenderer == null) {
+            return false;
+        }
+        var camera = mc.gameRenderer.getMainCamera();
+        if (camera.getFluidInCamera() != net.minecraft.world.level.material.FogType.NONE) {
+            return true;
+        }
+        return camera.getEntity() instanceof net.minecraft.world.entity.LivingEntity living
+                && (living.hasEffect(net.minecraft.world.effect.MobEffects.BLINDNESS)
+                    || living.hasEffect(net.minecraft.world.effect.MobEffects.DARKNESS));
+    }
+
+    //What renderOpaque actually saw this frame. The command that reports it runs on the main thread
+    //outside the render pass, where the fog state is whatever the last writer left - reading it there
+    //describes a different moment than the one that matters.
+    private static volatile float lastRenderFogEnd = -1;
+    private static volatile float lastRenderVanillaFar = -1;
+    private static volatile boolean lastRenderSkipped;
+
+
+    //The fog RenderSystem holds while sodium's terrain pass runs, which is what
+    //ChunkShaderFogComponent feeds the chunk shaders - the ground truth for what the terrain beside
+    //the LOD is actually wearing.
+    private static volatile float terrainFogEndAtRender = -1;
+    private static volatile float terrainFogStartAtRender = -1;
+    public static float getTerrainFogEndAtRender() { return terrainFogEndAtRender; }
+
+    public static float getTerrainFogStartAtRender() { return terrainFogStartAtRender; }
+    public static float getLastRenderFogEnd() { return lastRenderFogEnd; }
+    public static float getLastRenderVanillaFar() { return lastRenderVanillaFar; }
+    public static boolean wasLastRenderSkipped() { return lastRenderSkipped; }
+
+    private static boolean visionRestricted() {
+        var mc = Minecraft.getInstance();
+        if (mc.options == null || mc.gameRenderer == null) {
+            lastRenderSkipped = false;
+            return false;
+        }
+        if (!(mc.gameRenderer.getMainCamera().getEntity()
+                instanceof net.minecraft.world.entity.LivingEntity living)) {
+            lastRenderSkipped = false;
+            return false;
+        }
+
+        //Work out how far vanilla lets the player see, using vanilla's own formulas rather than reading
+        //back a fog value. Reading it back does not work here: several setupFog calls run per frame with
+        //different far planes (our own GameRenderer.getDepthFar wrap raises one of them to 32*4*srd), so
+        //whichever call happens to be last leaves a number that means nothing without knowing which far
+        //plane produced it. Computing it directly needs no such context.
+        float viewDistance = mc.options.getEffectiveRenderDistance() * 16.0f;
+        float restricted = Float.MAX_VALUE;
+
+        var blindness = living.getEffect(net.minecraft.world.effect.MobEffects.BLINDNESS);
+        if (blindness != null) {
+            //FogRenderer.BlindnessFogFunction
+            restricted = blindness.isInfiniteDuration()
+                    ? 5.0f
+                    : net.minecraft.util.Mth.lerp(
+                            Math.min(1.0f, blindness.getDuration() / 20.0f), viewDistance, 5.0f);
+        }
+
+        var darkness = living.getEffect(net.minecraft.world.effect.MobEffects.DARKNESS);
+        if (darkness != null) {
+            //FogRenderer.DarknessFogFunction. Blend factor ramps over 22 ticks at each end, so this
+            //tracks the pulse instead of snapping the world away the instant the effect appears.
+            float partialTick = mc.getTimer().getGameTimeDeltaPartialTick(false);
+            float f = net.minecraft.util.Mth.lerp(
+                    darkness.getBlendFactor(living, partialTick), viewDistance, 15.0f);
+            restricted = Math.min(restricted, f);
+        }
+
+        lastRenderFogEnd = restricted;
+        lastRenderVanillaFar = viewDistance;
+        //Only once vanilla is actually showing less than the player's normal view is there nothing left
+        //for the LOD to add.
+        boolean skip = restricted < viewDistance * 0.9f;
+        lastRenderSkipped = skip;
+        return skip;
+    }
+
     public void renderOpaque(Viewport<?> viewport) {
         if (viewport == null) {
             return;
@@ -266,7 +360,15 @@ public class VoxyRenderSystem {
             Logger.error("Cannot render Voxy with an empty viewport");
             return;
         }
+        terrainFogStartAtRender = RenderSystem.getShaderFogStart();
+        terrainFogEndAtRender = RenderSystem.getShaderFogEnd();
+        if (visionRestricted()) {
+            return;
+        }
 
+        //Cheap and idempotent; done here so the profiler can attribute work to the render thread
+        //without a ThreadLocal on every instrumented call
+        me.cortex.voxy.commonImpl.VoxyProfile.markRenderThread();
         TimingStatistics.resetSamplers();
 
         TimingStatistics.all.start();
@@ -377,8 +479,6 @@ public class VoxyRenderSystem {
         //No-op unless a capture is armed (/voxy debug capture)
         me.cortex.voxy.client.FrameProfiler.onFrameEnd();
     }
-
-
 
     private long getModelBakeBudgetNanos() {
         int pressure = VoxyConfig.CONFIG.getRenderPressureLevel();

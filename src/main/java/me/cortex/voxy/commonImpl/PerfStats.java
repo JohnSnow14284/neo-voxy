@@ -20,6 +20,7 @@ public final class PerfStats {
     //--- create client ---
     //Kinetic leave-behind snapshots dropped by the distance bound (each freed a VAO/VBO + heap verts)
     public static final LongAdder kineticSnapshotEvicted = new LongAdder();
+    public static final LongAdder contraptionSnapshotEvicted = new LongAdder();
     //Per-tick 64KB re-bakes avoided for contraptions that resolved to no drawable mesh
     public static final LongAdder contraptionRebakeSkipped = new LongAdder();
     //Traversal "request already in flight" warns suppressed after the first few
@@ -37,12 +38,21 @@ public final class PerfStats {
     public static final LongAdder sectionUniformKept = new LongAdder();
     //Sections that had to allocate a real array (the denominator for the uniform hit rate)
     public static final LongAdder sectionMaterialized = new LongAdder();
+
+    //Sections ingested with no owning chunk, i.e. handed over by a server-side LOD sender rather than
+    //loaded by this client. The one unambiguous sign that bridge is alive - terrain simply looking
+    //fuller cannot tell a working sender from the client having flown there earlier.
+    public static final LongAdder sectionIngestedChunkless = new LongAdder();
+    public static final LongAdder sectionIngestedWithChunk = new LongAdder();
     //Materialise calls that found another thread had already done it (contention, but no wasted work)
     public static final LongAdder sectionMaterializeContended = new LongAdder();
     //Neighbour face slices filled from a uniform value instead of copied out of an array
     public static final LongAdder neighborFaceUniformFill = new LongAdder();
     //Ingest writes whose values all matched the uniform value, so the section stayed uniform
     public static final LongAdder sectionUniformWriteSkipped = new LongAdder();
+    //Sections whose translucent or double-sided quad bucket filled up and had quads dropped. Non-zero
+    //means geometry is missing from those sections - see the guard in RenderDataFactory.
+    public static final LongAdder quadBucketOverflow = new LongAdder();
 
     //--- section saving ---
     //Batched section writes: sections/commits is the headline (>1 means batching is working at all)
@@ -63,6 +73,7 @@ public final class PerfStats {
         sb.append(ratio("copycat material cache", copycatKeyHit, copycatKeyMiss)).append('\n');
         sb.append(ratio("train pose reuse", trainPoseCacheHit, trainPoseCacheMiss)).append('\n');
         sb.append(String.format("  %-22s %,d", "kinetic snapshots evicted", kineticSnapshotEvicted.sum())).append('\n');
+        sb.append(String.format("  %-22s %,d", "contraption snaps evicted", contraptionSnapshotEvicted.sum())).append('\n');
         sb.append(String.format("  %-22s %,d", "contraption rebakes skipped", contraptionRebakeSkipped.sum())).append('\n');
         sb.append(String.format("  %-22s %,d", "train shapes deferred", trainShapeBuildDeferred.sum())).append('\n');
         sb.append(String.format("  %-22s %,d", "node warns suppressed", nodeWarnSuppressed.sum())).append('\n');
@@ -79,16 +90,20 @@ public final class PerfStats {
                 (uniform * 256L) / 1024)).append('\n');
         sb.append(String.format("  %-22s %,d (contended %,d)",
                 "neighbour uniform fill", neighborFaceUniformFill.sum(), sectionMaterializeContended.sum())).append('\n');
-        sb.append(String.format("  %-22s %,d", "uniform writes skipped", sectionUniformWriteSkipped.sum()));
+        sb.append(String.format("  %-22s %,d", "uniform writes skipped", sectionUniformWriteSkipped.sum())).append('\n');
+        sb.append(String.format("  %-22s from server=%,d from this client=%,d",
+                "section ingest source", sectionIngestedChunkless.sum(), sectionIngestedWithChunk.sum())).append('\n');
+        sb.append(String.format("  %-22s %,d", "quad bucket overflows", quadBucketOverflow.sum()));
         return sb.toString();
     }
 
     public static void reset() {
         for (LongAdder a : new LongAdder[]{biomeCacheHit, biomeCacheMiss, copycatKeyHit, copycatKeyMiss,
-                kineticSnapshotEvicted, contraptionRebakeSkipped, nodeWarnSuppressed,
+                kineticSnapshotEvicted, contraptionSnapshotEvicted, contraptionRebakeSkipped, nodeWarnSuppressed,
                 trainPoseCacheHit, trainPoseCacheMiss, trainShapeBuildDeferred,
                 saveBatchCommits, saveBatchSections,
-                sectionUniformKept, sectionMaterialized, sectionMaterializeContended, neighborFaceUniformFill, sectionUniformWriteSkipped}) {
+                sectionUniformKept, sectionMaterialized, sectionMaterializeContended, neighborFaceUniformFill, sectionUniformWriteSkipped,
+                sectionIngestedChunkless, sectionIngestedWithChunk, quadBucketOverflow}) {
             a.reset();
         }
     }

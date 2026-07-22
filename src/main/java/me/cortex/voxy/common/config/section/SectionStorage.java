@@ -2,6 +2,7 @@ package me.cortex.voxy.common.config.section;
 
 import me.cortex.voxy.common.config.IMappingStorage;
 import me.cortex.voxy.common.config.IStoredSectionPositionIterator;
+import me.cortex.voxy.common.config.storage.StorageBackend;
 import me.cortex.voxy.common.world.WorldSection;
 
 public abstract class SectionStorage implements IMappingStorage, IStoredSectionPositionIterator {
@@ -31,4 +32,20 @@ public abstract class SectionStorage implements IMappingStorage, IStoredSectionP
             @Override public void close() {}
         };
     }
+
+    //Pass-through to the backing store's aux tables (see StorageBackend). Default: no table, so a
+    //storage stack that cannot hold one leaves its caller running from memory for the session.
+    public boolean supportsAuxTable(String table) {
+        return false;
+    }
+
+    public void putAux(String table, long key, byte[] value) {}
+
+    public byte[] getAux(String table, long key) {
+        return null;
+    }
+
+    public void deleteAux(String table, long key) {}
+
+    public void forEachAux(String table, StorageBackend.AuxEntryConsumer consumer) {}
 }

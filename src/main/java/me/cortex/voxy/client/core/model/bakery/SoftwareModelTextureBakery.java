@@ -25,6 +25,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.SingleThreadedRandomSource;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 import net.minecraft.world.level.material.FluidState;
+import net.minecraft.client.resources.model.BakedModel;
+import net.neoforged.neoforge.client.ChunkRenderTypeSet;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
@@ -33,8 +35,6 @@ import org.joml.Vector3f;
 import org.lwjgl.system.MemoryUtil;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.Collections;
-import java.util.List;
 
 import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL11C.GL_RGBA;
@@ -44,10 +44,6 @@ import static org.lwjgl.opengl.GL21.GL_PIXEL_PACK_BUFFER;
 
 public class SoftwareModelTextureBakery {
     private static final Matrix4f[] VIEWS = new Matrix4f[6];
-    private static final Direction[] BAKE_DIRECTIONS = {
-            Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH,
-            Direction.WEST, Direction.EAST, null
-    };
 
     private final ReuseVertexConsumer opaqueVC = new ReuseVertexConsumer();
     private final ReuseVertexConsumer translucentVC = new ReuseVertexConsumer(1);
@@ -137,44 +133,30 @@ public class SoftwareModelTextureBakery {
         //null-layer query skips that gate entirely (same shape as the contraption mesh path, which
         //renders every copycat correctly)
         RenderType quadQueryLayer = me.cortex.voxy.commonImpl.compat.CreateCopycatCompat.isCopycatState(state)
-                ? null : layer;
+                ? null : resolveQueryLayer(model, modelState, modelData, layer);
 
-        List<RenderType> layers = Collections.singletonList(quadQueryLayer);
-        if (plan.independentModel()) {
-            try {
-                var declaredLayers = model.getRenderTypes(modelState,
-                        new SingleThreadedRandomSource(42L), modelData).asList();
-                if (!declaredLayers.isEmpty()) layers = declaredLayers;
-            } catch (Throwable ignored) {
-                // Optional model data from another Domum release may not expose its layers. The
-                // normal state layer remains a safe fallback.
+        for (Direction direction : new Direction[] { Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH,
+                Direction.WEST, Direction.EAST, null }) {
+            var random = new SingleThreadedRandomSource(42L);
+            var quads = model.getQuads(modelState, direction, random, modelData, quadQueryLayer);
+
+            if (direction != null && !quads.isEmpty()) {
+                crossCandidate = false;
             }
-        }
 
-        var random = new SingleThreadedRandomSource(42L);
-        for (RenderType renderLayer : layers) {
-            for (Direction direction : BAKE_DIRECTIONS) {
-                random.setSeed(42L);
-                var quads = model.getQuads(modelState, direction, random, modelData, renderLayer);
-
-                if (direction != null && !quads.isEmpty()) {
-                    crossCandidate = false;
-                }
-
-                for (var quad : quads) {
-                    if (direction == null && crossCandidate) {
-                        int family = classifyGroundCrossQuad(quad.getVertices());
-                        if (family == 0) {
-                            crossCandidate = false;
-                        } else {
-                            diagonalFamilies |= family;
-                            unculledQuads++;
-                        }
+            for (var quad : quads) {
+                if (direction == null && crossCandidate) {
+                    int family = classifyGroundCrossQuad(quad.getVertices());
+                    if (family == 0) {
+                        crossCandidate = false;
+                    } else {
+                        diagonalFamilies |= family;
+                        unculledQuads++;
                     }
-
-                    (renderLayer == RenderType.translucent() ? this.translucentVC : this.opaqueVC)
-                            .quad(quad, forceSolidLeaves, renderLayer, modelState);
                 }
+
+                (layer == RenderType.translucent() ? this.translucentVC : this.opaqueVC)
+                        .quad(quad, forceSolidLeaves, layer, modelState);
             }
         }
 
@@ -342,6 +324,34 @@ public class SoftwareModelTextureBakery {
     private static final long SINGLE_FACE_OUTPUT_SIZE = (ModelFactory.MODEL_TEXTURE_SIZE
             * ModelFactory.MODEL_TEXTURE_SIZE) * 8;
     // Faces are appended in direction order: down, up, north, south, west, east.
+
+    //The layer to hand getQuads. It has to come from the MODEL's declared set, not from the block's
+    //registered chunk render type: those disagree more often than one would hope, and the chunk mesher
+    //only ever queries what the model declares, so a model is within its rights to assume it never
+    //sees anything else. Immersive Engineering's conveyor is the case that found this - it declares
+    //{cutout, translucent} and keys an internal per-layer cache on exactly those, so being asked for
+    //the block's registered solid() handed it a null cache and it threw.
+    //A copycat is the deliberate exception and never reaches here; its gate is bypassed with null.
+    private static RenderType resolveQueryLayer(BakedModel model, BlockState modelState, ModelData modelData,
+                                                RenderType layer) {
+        ChunkRenderTypeSet declared;
+        try {
+            declared = model.getRenderTypes(modelState, new SingleThreadedRandomSource(42L), modelData);
+        } catch (Throwable t) {
+            //A model that cannot even report its layers is not going to survive being queried for one
+            return layer;
+        }
+        if (declared == null || declared.isEmpty() || declared.contains(layer)) {
+            return layer;
+        }
+        //Not declared: take the model at its word and ask for something it does claim to emit, rather
+        //than nothing at all - the final opaque/cutout/translucent call is made from the baked pixels
+        //afterwards, so querying a neighbouring layer costs correctness nothing here.
+        for (RenderType candidate : declared) {
+            return candidate;
+        }
+        return layer;
+    }
 
     public int renderToOutput(int blockId, BlockState state, long outputBuffer) {
         MemoryUtil.memSet(outputBuffer, 0, 16 * 16 * 8 * 6);

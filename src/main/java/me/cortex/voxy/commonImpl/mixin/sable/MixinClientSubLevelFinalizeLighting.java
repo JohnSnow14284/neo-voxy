@@ -8,7 +8,6 @@ import me.cortex.voxy.common.world.WorldEngine;
 import me.cortex.voxy.common.world.WorldSection;
 import me.cortex.voxy.common.world.other.Mapper;
 import me.cortex.voxy.commonImpl.WorldIdentifier;
-import me.cortex.voxy.commonImpl.compat.sable.SableClientSkyLightCache;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
@@ -30,8 +29,6 @@ public class MixinClientSubLevelFinalizeLighting {
     @Unique
     private static boolean voxy$skyLightFallbackUnavailable;
 
-    @Unique
-    private long voxy$lastSkyLightCacheRevision = Long.MIN_VALUE;
 
     @Shadow(remap = false)
     private int latestSkyLightScale;
@@ -45,15 +42,6 @@ public class MixinClientSubLevelFinalizeLighting {
     @Inject(method = "setFinalized", at = @At("TAIL"), remap = false)
     private void voxy$invalidateInitialSkyLightScale(CallbackInfo ci) {
         this.latestSkyLightScale = -1;
-    }
-
-    @Inject(method = "getLatestSkyLightScale", at = @At("HEAD"), remap = false)
-    private void voxy$invalidateSkyLightAfterPacketCacheUpdate(CallbackInfoReturnable<Integer> cir) {
-        long revision = SableClientSkyLightCache.revision(this.getLevel());
-        if (this.voxy$lastSkyLightCacheRevision != revision) {
-            this.latestSkyLightScale = -1;
-            this.voxy$lastSkyLightCacheRevision = revision;
-        }
     }
 
     @Inject(method = "computeSubLevelSkyLight", at = @At("RETURN"), cancellable = true, remap = false)
@@ -115,11 +103,8 @@ public class MixinClientSubLevelFinalizeLighting {
             return level.getBrightness(LightLayer.SKY, pos);
         }
 
-        int cachedSkyLight = SableClientSkyLightCache.getSkyLight(level, pos);
-        if (cachedSkyLight >= 0) {
-            return cachedSkyLight;
-        }
-
+        //Straight to the voxel store: a chunk the client does not have has no brightness to read, and
+        //this is the only remaining source.
         return voxy$readVoxySkyLight(level, pos);
     }
 

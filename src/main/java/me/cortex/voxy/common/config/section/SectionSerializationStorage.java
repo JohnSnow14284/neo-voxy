@@ -46,6 +46,31 @@ public class SectionSerializationStorage extends SectionStorage {
 
 
     @Override
+    public boolean supportsAuxTable(String table) {
+        return this.backend.supportsAuxTable(table);
+    }
+
+    @Override
+    public void putAux(String table, long key, byte[] value) {
+        this.backend.putAux(table, key, value);
+    }
+
+    @Override
+    public byte[] getAux(String table, long key) {
+        return this.backend.getAux(table, key);
+    }
+
+    @Override
+    public void deleteAux(String table, long key) {
+        this.backend.deleteAux(table, key);
+    }
+
+    @Override
+    public void forEachAux(String table, StorageBackend.AuxEntryConsumer consumer) {
+        this.backend.forEachAux(table, consumer);
+    }
+
+    @Override
     public void saveSection(WorldSection section) {
         var saveData = SaveLoadSystem3.serialize(section);
         this.backend.setSectionData(section.key, saveData);

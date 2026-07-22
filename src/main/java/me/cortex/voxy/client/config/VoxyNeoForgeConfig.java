@@ -47,7 +47,7 @@ public class VoxyNeoForgeConfig {
     private static final ModConfigSpec.DoubleValue SUB_DIVISION_SIZE = BUILDER
             .comment("Subdivision size for LOD rendering (28-256)",
                      "Lower = more detailed LODs but more GPU load")
-            .defineInRange("subDivisionSize", 126.0, 28.0, 256.0);
+            .defineInRange("subDivisionSize", 63.0, 28.0, 256.0);
 
     private static final ModConfigSpec.BooleanValue USE_ENVIRONMENTAL_FOG = BUILDER
             .comment("Apply environmental fog to LOD terrain")
@@ -62,9 +62,8 @@ public class VoxyNeoForgeConfig {
             .defineInRange("lodBoundaryBuffer", 1, 0, 4);
 
     private static final ModConfigSpec.BooleanValue ENABLE_LOD_BOUNDARY_FADE = BUILDER
-            .comment("Enable LOD fade.",
-                     "Uses a camera-centred circular handoff between vanilla terrain and Voxy LOD.",
-                     "Disable it when the active shader pack already supplies an LOD fade, for example Photon.")
+            .comment("Use a camera-centred circular handoff between vanilla terrain and Voxy LOD.",
+                     "Disable this when the active shader pack already supplies an LOD fade (for example Photon).")
             .define("enableLodBoundaryFade", true);
 
     private static final ModConfigSpec.IntValue LOD_BOUNDARY_FADE_LENGTH = BUILDER
@@ -125,12 +124,8 @@ public class VoxyNeoForgeConfig {
                      "Displays LOD traversal counts, visible sections, and quad counts")
             .define("renderStatistics", false);
 
-    private static final ModConfigSpec.BooleanValue DISTANT_BEACON_BEAMS = BUILDER
-            .comment("Render correctly coloured vanilla beacon beams beyond 256 blocks, out to the LOD radius")
-            .define("distantBeaconBeams", true);
-
     // Create mod integration: render distant trains/tracks/contraptions and cull placed kinetic parts.
-    // The *MaxChunks caps are in chunks; 0 = follow voxy's LOD radius (32 * sectionRenderDistance chunks).
+    // The *MaxChunks caps are in chunks; 0 = follow Voxy's LOD radius.
     // Lowering a cap renders that integration nearer to save GPU; the train cap also shrinks the
     // server's pose-stream window on the integrated server (less bandwidth).
     private static final ModConfigSpec.BooleanValue DISTANT_TRAINS = BUILDER
@@ -141,7 +136,7 @@ public class VoxyNeoForgeConfig {
             .comment("Max distance to render distant trains, in chunks. 0 = follow the LOD radius.",
                      "Lower renders trains nearer; on the integrated server it also shrinks the",
                      "server's train pose-stream window, cutting bandwidth.")
-            .defineInRange("distantTrainMaxChunks", 0, 0, VoxyConfig.MAX_CREATE_DISTANCE_CHUNKS);
+            .defineInRange("distantTrainMaxChunks", 96, 0, 192);
 
     private static final ModConfigSpec.BooleanValue DISTANT_TRACKS = BUILDER
             .comment("Render the Create track network beyond the view distance, in the LOD")
@@ -149,7 +144,7 @@ public class VoxyNeoForgeConfig {
 
     private static final ModConfigSpec.IntValue DISTANT_TRACK_MAX_CHUNKS = BUILDER
             .comment("Max distance to render the distant track network, in chunks. 0 = follow the LOD radius.")
-            .defineInRange("distantTrackMaxChunks", 0, 0, VoxyConfig.MAX_CREATE_DISTANCE_CHUNKS);
+            .defineInRange("distantTrackMaxChunks", 96, 0, 192);
 
     private static final ModConfigSpec.BooleanValue DISTANT_CONTRAPTIONS = BUILDER
             .comment("Render snapshots of Create contraptions (bearings/pistons/gantries/mounted)",
@@ -158,7 +153,15 @@ public class VoxyNeoForgeConfig {
 
     private static final ModConfigSpec.IntValue DISTANT_CONTRAPTION_MAX_CHUNKS = BUILDER
             .comment("Max distance to render distant contraptions, in chunks. 0 = follow the LOD radius.")
-            .defineInRange("distantContraptionMaxChunks", 0, 0, VoxyConfig.MAX_CREATE_DISTANCE_CHUNKS);
+            .defineInRange("distantContraptionMaxChunks", 64, 0, 192);
+
+    private static final ModConfigSpec.BooleanValue DISTANT_BEACONS = BUILDER
+            .comment("Draw beacon beams past vanilla's block-entity render range")
+            .define("distantBeacons", true);
+
+    private static final ModConfigSpec.IntValue DISTANT_BEACON_MAX_CHUNKS = BUILDER
+            .comment("Maximum beacon-beam distance in chunks. 0 follows Voxy's LOD radius.")
+            .defineInRange("distantBeaconMaxChunks", 192, 0, 512);
 
     private static final ModConfigSpec.BooleanValue DISTANT_KINETICS = BUILDER
             .comment("Cull placed kinetic machine moving parts (rotating shafts/gears) beyond the render",
@@ -191,7 +194,6 @@ public class VoxyNeoForgeConfig {
         VoxyConfig.CONFIG.followLodRequestDistance = FOLLOW_LOD_REQUEST_DISTANCE.get();
         VoxyConfig.CONFIG.requestDistance = REQUEST_DISTANCE.get();
         VoxyConfig.CONFIG.earthCurveRatio = EARTH_CURVE_RATIO.get();
-        VoxyConfig.CONFIG.distantBeaconBeams = DISTANT_BEACON_BEAMS.get();
         // Create integration
         VoxyConfig.CONFIG.distantTrains = DISTANT_TRAINS.get();
         VoxyConfig.CONFIG.distantTrainMaxChunks = DISTANT_TRAIN_MAX_CHUNKS.get();
@@ -199,6 +201,8 @@ public class VoxyNeoForgeConfig {
         VoxyConfig.CONFIG.distantTrackMaxChunks = DISTANT_TRACK_MAX_CHUNKS.get();
         VoxyConfig.CONFIG.distantContraptions = DISTANT_CONTRAPTIONS.get();
         VoxyConfig.CONFIG.distantContraptionMaxChunks = DISTANT_CONTRAPTION_MAX_CHUNKS.get();
+        VoxyConfig.CONFIG.distantBeacons = DISTANT_BEACONS.get();
+        VoxyConfig.CONFIG.distantBeaconMaxChunks = DISTANT_BEACON_MAX_CHUNKS.get();
         VoxyConfig.CONFIG.distantKinetics = DISTANT_KINETICS.get();
         VoxyConfig.CONFIG.enableFarPlayerRendering = ENABLE_FAR_PLAYER_RENDERING.get();
         VoxyConfig.CONFIG.enableFarVehicleRendering = ENABLE_FAR_VEHICLE_RENDERING.get();
@@ -232,7 +236,6 @@ public class VoxyNeoForgeConfig {
         FOLLOW_LOD_REQUEST_DISTANCE.set(VoxyConfig.CONFIG.followLodRequestDistance);
         REQUEST_DISTANCE.set(VoxyConfig.CONFIG.requestDistance);
         EARTH_CURVE_RATIO.set(VoxyConfig.CONFIG.earthCurveRatio);
-        DISTANT_BEACON_BEAMS.set(VoxyConfig.CONFIG.distantBeaconBeams);
         // Create integration
         DISTANT_TRAINS.set(VoxyConfig.CONFIG.distantTrains);
         DISTANT_TRAIN_MAX_CHUNKS.set(VoxyConfig.CONFIG.distantTrainMaxChunks);
@@ -240,6 +243,8 @@ public class VoxyNeoForgeConfig {
         DISTANT_TRACK_MAX_CHUNKS.set(VoxyConfig.CONFIG.distantTrackMaxChunks);
         DISTANT_CONTRAPTIONS.set(VoxyConfig.CONFIG.distantContraptions);
         DISTANT_CONTRAPTION_MAX_CHUNKS.set(VoxyConfig.CONFIG.distantContraptionMaxChunks);
+        DISTANT_BEACONS.set(VoxyConfig.CONFIG.distantBeacons);
+        DISTANT_BEACON_MAX_CHUNKS.set(VoxyConfig.CONFIG.distantBeaconMaxChunks);
         DISTANT_KINETICS.set(VoxyConfig.CONFIG.distantKinetics);
         ENABLE_FAR_PLAYER_RENDERING.set(VoxyConfig.CONFIG.enableFarPlayerRendering);
         ENABLE_FAR_VEHICLE_RENDERING.set(VoxyConfig.CONFIG.enableFarVehicleRendering);

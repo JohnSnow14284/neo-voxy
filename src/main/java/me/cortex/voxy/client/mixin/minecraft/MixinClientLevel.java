@@ -62,8 +62,6 @@ public abstract class MixinClientLevel {
     private void voxy$injectIngestOnStateChange(BlockPos pos, BlockState old, BlockState updated, CallbackInfo cir) {
         if (old == updated) return;
 
-        me.cortex.voxy.client.compat.beacon.DistantBeaconRenderer.onBlockStateChanged(pos, old, updated);
-
         //Domum Ornamentum asks for a model-data rebuild by calling setBlocksDirty(pos, AIR, state) - the
         //block itself never changes, only the materials stored on its block entity. That is invisible to
         //both tests below (the state is not air, and the block need not sit on a section border), so

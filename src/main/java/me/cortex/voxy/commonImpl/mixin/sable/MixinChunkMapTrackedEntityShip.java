@@ -20,7 +20,12 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 public abstract class MixinChunkMapTrackedEntityShip {
     @Shadow @Final Entity entity;
 
-    @Redirect(method = "updatePlayer", at = @At(value = "INVOKE", target = "Ljava/lang/Math;min(II)I"))
+    //require = 0: this redirects a vanilla Math.min inside updatePlayer, a method several server
+    //optimisation mods rewrite (servercore and friends are on this class in the wild). If one of them
+    //gets there first the call site is gone and the injection finds nothing - which as a hard failure
+    //takes the whole server down at entity-tracking time. Losing it only means ship-borne contraptions
+    //fall back to the vanilla view-distance clamp, so degrade instead of crashing.
+    @Redirect(method = "updatePlayer", at = @At(value = "INVOKE", target = "Ljava/lang/Math;min(II)I"), require = 0)
     private int voxy$shipContraptionTrackingRange(int range, int viewDistanceBlocks) {
         if (this.entity instanceof AbstractContraptionEntity) {
             int shipRange = ShipBorneServer.shipTrackingRangeBlocks(this.entity);
