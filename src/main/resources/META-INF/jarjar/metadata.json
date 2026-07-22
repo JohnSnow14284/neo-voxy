@@ -38,18 +38,6 @@
     },
     {
       "identifier": {
-        "group": "org.lz4",
-        "artifact": "lz4-java"
-      },
-      "version": {
-        "range": "[1.8.0,)",
-        "artifactVersion": "1.8.0"
-      },
-      "path": "META-INF/jarjar/lz4-java-1.8.0.jar",
-      "isObfuscated": false
-    },
-    {
-      "identifier": {
         "group": "org.rocksdb",
         "artifact": "rocksdbjni"
       },

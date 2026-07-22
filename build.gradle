@@ -42,6 +42,10 @@ dependencies {
     compileOnly files('libs/compile/iris-neoforge-1.11.2+mc26.1.2.jar')
     compileOnly fileTree('src/main/resources/META-INF/jarjar') {
         include '*.jar'
+        // Minecraft 26.1.2 already supplies at.yawk.lz4:lz4-java:1.10.1 as
+        // module org.lz4.java. Compiling and packaging the legacy 1.8.0 copy
+        // creates a duplicate JPMS module during NeoForge startup.
+        exclude 'lz4-java-*.jar'
     }
 
     runtimeOnly files('libs/runtime/sodium-neoforge-0.9.1+mc26.1.2.jar')
@@ -52,6 +56,13 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = 25
     options.deprecation = true
+}
+
+tasks.named('processResources') {
+    // Keep the recovered legacy binary in the source snapshot, but never put
+    // it in the distributable. The game-provided 1.10.1 remains available to
+    // LZ4Compressor at compile time and runtime.
+    exclude 'META-INF/jarjar/lz4-java-*.jar'
 }
 
 jar {
