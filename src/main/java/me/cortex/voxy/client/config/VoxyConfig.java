@@ -114,6 +114,9 @@ public class VoxyConfig {
     public boolean shareFarPlayerPosition = true;
     // Persisted separately from the user-facing master switch so the credits message is shown once.
     public boolean joinMessageShown = false;
+    // Separate migration notice: existing installations that already saw the credits still receive
+    // the update/cache cleanup advice once after upgrading.
+    public boolean upgradeCleanupNoticeShown = false;
 
     public int getRequestDistance() {
         int requested = this.followLodRequestDistance

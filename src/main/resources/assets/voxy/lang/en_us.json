@@ -109,6 +109,7 @@
   "voxy.join.repo": "Repository %s",
   "voxy.join.copyGroup": "Click to copy the group number",
   "voxy.join.openRepo": "Click to open the GitHub repository",
+  "voxy.join.upgradeCleanup": "[Neo-Voxy] If an update causes problems, delete the Neo-Voxy configuration file and the world's Voxy cache, then try again.",
   "voxy.config.general.leafLodMode": "Leaf LOD mode",
   "voxy.config.general.leafLodMode.tooltip": "Controls distant leaf rendering. Fast uses opaque foliage. Balanced uses stable per-block texture rotations, culls hidden internal faces, and keeps irregular mip-aware cutouts at medium impact. Quality preserves fine cutout detail at higher GPU cost.",
   "voxy.config.general.leafLodMode.fast": "Fast",

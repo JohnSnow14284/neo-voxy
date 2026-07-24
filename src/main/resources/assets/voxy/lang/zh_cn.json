@@ -109,6 +109,7 @@
   "voxy.join.repo": "仓库 %s",
   "voxy.join.copyGroup": "点击复制群号",
   "voxy.join.openRepo": "点击打开 GitHub 仓库",
+  "voxy.join.upgradeCleanup": "[Neo-Voxy] 更新 Voxy 后若出现问题，请删除 Neo-Voxy 配置文件和存档中的 Voxy 缓存后再试。",
   "voxy.config.general.leafLodMode": "树叶 LOD 模式",
   "voxy.config.general.leafLodMode.tooltip": "调节远景树叶的画质与性能。性能模式使用不透明树叶；平衡模式按叶块稳定旋转纹理、剔除不可见内部面并保留不规则 Mip 镂空，性能影响为中；质量模式保留细小透明孔洞，但 GPU 开销更高。",
   "voxy.config.general.leafLodMode.fast": "性能",

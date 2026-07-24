@@ -197,11 +197,9 @@ public class WorldConversionFactory {
         // Domum Ornamentum model data is only needed for sections that actually
         // contain material-textured block entities. Avoid the extra palette and
         // ThreadLocal lookups for every voxel in normal sections.
-        //Fetched once per section - each is a ThreadLocal.get, and indexing the arrays directly in the
-        //voxel loop keeps that off the per-voxel path. Null when this section has no such blocks.
-        final int[] domumIds = DomumOrnamentumCompat.activeSectionIds();
+        final boolean hasDomumMappings = DomumOrnamentumCompat.hasSectionMappings();
         final int[] copycatIds = me.cortex.voxy.commonImpl.compat.CreateCopycatCompat.activeSectionIds();
-        final boolean hasDomumSectionMappings = domumIds != null || copycatIds != null;
+        final boolean hasVariantMappings = hasDomumMappings || copycatIds != null;
         var blockStorage = blockDataAccessor.voxy$getStorage();
         if (blockStorage instanceof SimpleBitStorage bStor) {
             var bDat = bStor.getRaw();
@@ -225,15 +223,18 @@ public class WorldConversionFactory {
                     int clampedPaletteIndex = Math.min(paletteIndex, pcc);
                     bId = pc[clampedPaletteIndex];
                     voxelState = null;
-                    if (hasDomumSectionMappings) {
+                    if (hasVariantMappings) {
                         try { voxelState = vp.valueFor(clampedPaletteIndex); } catch (Throwable ignored) {}
                     }
                 } else {
                     voxelState = bps.valueFor(paletteIndex);
                     bId = stateMapper.getIdForBlockState(voxelState);
                 }
-                if (hasDomumSectionMappings && voxelState != null) {
-                    if (domumIds != null) { int m = domumIds[i]; if (m != 0) bId = m; }
+                if (hasVariantMappings && voxelState != null) {
+                    if (hasDomumMappings) {
+                        bId = DomumOrnamentumCompat.mapBlockId(
+                                stateMapper, voxelState, bId, i);
+                    }
                     if (copycatIds != null) { int m = copycatIds[i]; if (m != 0) bId = m; }
                 }
                 sample >>>= eBits;
@@ -254,14 +255,17 @@ public class WorldConversionFactory {
             } else {
                 nonZeroCnt = 4096;
                 BlockState voxelState = null;
-                if (hasDomumSectionMappings) {
+                if (hasVariantMappings) {
                     try { voxelState = vp.valueFor(0); } catch (Throwable ignored) {}
                 }
                 for (int i = 0; i <= 0xFFF; i++) {
                     byte light = lightSupplier.supply(i&0xF, (i>>8)&0xF, (i>>4)&0xF);
                     int mappedBlockId = bId;
-                    if (hasDomumSectionMappings && voxelState != null) {
-                        if (domumIds != null) { int m = domumIds[i]; if (m != 0) mappedBlockId = m; }
+                    if (hasVariantMappings && voxelState != null) {
+                        if (hasDomumMappings) {
+                            mappedBlockId = DomumOrnamentumCompat.mapBlockId(
+                                    stateMapper, voxelState, mappedBlockId, i);
+                        }
                         if (copycatIds != null) { int m = copycatIds[i]; if (m != 0) mappedBlockId = m; }
                     }
                     data[i] = Mapper.composeMappingId(light, mappedBlockId, biomes[Integer.compress(i,0b1100_1100_1100)]);

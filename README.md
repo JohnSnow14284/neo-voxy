@@ -2,11 +2,15 @@
 
 [简体中文](#简体中文) | [English](#english)
 
-Neo-Voxy is an unofficial NeoForge port and compatibility-focused fork of
-[Voxy](https://github.com/MCRcortex/voxy). It currently has separate branches for Minecraft
+Neo-Voxy is maintained by **JohnSnow** and adds new features on top of
+[NHblock714/voxy](https://github.com/NHblock714/voxy). It currently has separate branches for Minecraft
 **1.21.1** and **26.1.2**.
 
-Maintained by **NHblock714**.
+The Sable, Create, and EclipticSeasons compatibility implementations originate from **NHblock**.
+
+> [!IMPORTANT]
+> If Neo-Voxy behaves incorrectly after an update, delete the Neo-Voxy configuration file and the
+> Voxy cache stored inside the affected world, then launch the game again.
 
 > [!CAUTION]
 > **Do not enable Neo-Voxy's circular LOD fade together with a shader pack that already implements
@@ -17,7 +21,12 @@ Maintained by **NHblock714**.
 ## 简体中文
 
 Neo-Voxy 为远距离地形提供高性能 LOD 渲染，并针对 NeoForge、Sodium、Iris 以及部分大型模组
-进行兼容性维护，由 **NHblock714** 维护。两个 Minecraft 分支分别构建，**JAR 与缓存不能跨版本混用**。
+进行兼容性维护，由 **JohnSnow** 维护。本项目基于
+[NHblock714/voxy](https://github.com/NHblock714/voxy) 添加新功能；Sable、Create 与节气模组
+（EclipticSeasons）兼容均来自 **NHblock**。两个 Minecraft 分支分别构建，**JAR 与缓存不能跨版本混用**。
+
+> [!IMPORTANT]
+> **更新 Neo-Voxy 后若出现问题，请删除 Neo-Voxy 配置文件和对应存档中的 Voxy 缓存，再重新进入游戏。**
 
 ### 版本与功能对比
 
@@ -52,7 +61,7 @@ Neo-Voxy 为远距离地形提供高性能 LOD 渲染，并针对 NeoForge、Sod
 | Iris | ✅ 1.8.12+ | ✅ 1.11.2 | 光影包需要自行适配远景渲染语义 |
 | Create | ✅ 6.0.10 专项 | 基础兼容 | 1.21.1 提供远景列车、轨道、动态结构及动力部件交接 |
 | Sable | ⚠️ 2.0.3 专项 | 无专项实现 | 保留远景载具加载与距离扩展；高风险联合深度重定向默认关闭 |
-| Domum Ornamentum | ✅ 专项 | 无专项实现 | 按方块实体材质数据缓存独立颜色与轻量模型 |
+| Domum Ornamentum | ✅ 专项 | 无专项实现 | 根据方块实体纹理数据烘焙独立模型，并采用主材质着色 |
 | Supplementaries / Lumisene | ✅ 专项 | 无专项实现 | 专用流体颜色、透明度及表面模型处理 |
 | EclipticSeasons | ✅ 0.13.8.4.1 专项 | 无专项实现 | 季节积雪 LOD 与季节变化后的可选重载 |
 | bits_n_bobs / Azimuth | ✅ 部分专项 | 无专项实现 | 参与 Create 动力部件的远景快照 |
@@ -71,7 +80,7 @@ Neo-Voxy 为远距离地形提供高性能 LOD 渲染，并针对 NeoForge、Sod
 
 | 分支 | Neo-Voxy 版本 | Java | NeoForge |
 |---|---|---:|---|
-| Minecraft 1.21.1 | 0.3.2 | 21 | 21.1.x |
+| Minecraft 1.21.1 | 0.3.3 | 21 | 21.1.x |
 | Minecraft 26.1.2 | 0.2.18-beta | 25 | 26.1.2.x |
 
 ### 构建
@@ -93,6 +102,10 @@ Ponder/Flywheel 以及 Sable 内嵌的 companion/Rapier 也会自动提取，因
 Neo-Voxy provides high-performance distant terrain LOD rendering with focused maintenance for
 NeoForge, Sodium, Iris, and selected large mods. The two Minecraft branches are built separately;
 **their JARs and caches are not interchangeable**.
+
+This project is maintained by **JohnSnow** and adds new features on top of
+[NHblock714/voxy](https://github.com/NHblock714/voxy). The Sable, Create, and EclipticSeasons
+compatibility implementations originate from **NHblock**.
 
 ### Version and feature comparison
 
@@ -128,7 +141,7 @@ mod cannot run alongside basic terrain LOD rendering.
 | Iris | ✅ 1.8.12+ | ✅ 1.11.2 | Shader packs must understand distant-terrain rendering semantics |
 | Create | ✅ 6.0.10 integration | Basic only | 1.21.1 adds distant trains, tracks, contraptions, and kinetic handoff |
 | Sable | ⚠️ 2.0.3 integration | No dedicated support | Distant loading/range remains; unsafe combined-depth redirection is off by default |
-| Domum Ornamentum | ✅ Integrated | No dedicated support | Cached block-entity material colours and lightweight independent models |
+| Domum Ornamentum | ✅ Integrated | No dedicated support | Independent model baking and main-material tint from block-entity texture data |
 | Supplementaries / Lumisene | ✅ Integrated | No dedicated support | Dedicated fluid colour, transparency, and surface handling |
 | EclipticSeasons | ✅ 0.13.8.4.1 integration | No dedicated support | Seasonal snow LOD and optional reload on season changes |
 | bits_n_bobs / Azimuth | ✅ Partial integration | No dedicated support | Included in Create kinetic snapshots |
@@ -147,7 +160,7 @@ not register its listeners, renderers, or recurring work, and the matching setti
 
 | Branch | Neo-Voxy version | Java | NeoForge |
 |---|---|---:|---|
-| Minecraft 1.21.1 | 0.3.2 | 21 | 21.1.x |
+| Minecraft 1.21.1 | 0.3.3 | 21 | 21.1.x |
 | Minecraft 26.1.2 | 0.2.18-beta | 25 | 26.1.2.x |
 
 ### Building

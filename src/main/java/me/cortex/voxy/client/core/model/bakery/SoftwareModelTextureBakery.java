@@ -34,6 +34,7 @@ import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.lwjgl.system.MemoryUtil;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import static org.lwjgl.opengl.GL11.*;
@@ -128,35 +129,52 @@ public class SoftwareModelTextureBakery {
         int diagonalFamilies = 0;
         int unculledQuads = 0;
 
-        //Copycat wrapper models gate per-layer queries on the MATERIAL model's declared render type
-        //set, which for the copycat base skeleton does not contain the layer the block maps to - the
-        //null-layer query skips that gate entirely (same shape as the contraption mesh path, which
-        //renders every copycat correctly)
-        RenderType quadQueryLayer = me.cortex.voxy.commonImpl.compat.CreateCopycatCompat.isCopycatState(state)
-                ? null : resolveQueryLayer(model, modelState, modelData, layer);
-
-        for (Direction direction : new Direction[] { Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH,
-                Direction.WEST, Direction.EAST, null }) {
-            var random = new SingleThreadedRandomSource(42L);
-            var quads = model.getQuads(modelState, direction, random, modelData, quadQueryLayer);
-
-            if (direction != null && !quads.isEmpty()) {
-                crossCandidate = false;
+        List<RenderType> layers = List.of(layer);
+        if (plan.independentModel()) {
+            try {
+                var declaredLayers = model.getRenderTypes(
+                        modelState, new SingleThreadedRandomSource(42L), modelData).asList();
+                if (!declaredLayers.isEmpty()) {
+                    layers = declaredLayers;
+                }
+            } catch (Throwable ignored) {
+                // Keep the block state's normal layer when optional model data is malformed.
             }
+        }
 
-            for (var quad : quads) {
-                if (direction == null && crossCandidate) {
-                    int family = classifyGroundCrossQuad(quad.getVertices());
-                    if (family == 0) {
-                        crossCandidate = false;
-                    } else {
-                        diagonalFamilies |= family;
-                        unculledQuads++;
-                    }
+        var random = new SingleThreadedRandomSource(42L);
+        for (RenderType renderLayer : layers) {
+            // Copycat wrapper models gate per-layer queries on the material model's declared
+            // render types. A null query asks the wrapper for all geometry.
+            RenderType quadQueryLayer =
+                    me.cortex.voxy.commonImpl.compat.CreateCopycatCompat.isCopycatState(state)
+                            ? null : resolveQueryLayer(
+                                    model, modelState, modelData, renderLayer);
+
+            for (Direction direction : new Direction[] { Direction.DOWN, Direction.UP,
+                    Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST, null }) {
+                random.setSeed(42L);
+                var quads = model.getQuads(
+                        modelState, direction, random, modelData, quadQueryLayer);
+
+                if (direction != null && !quads.isEmpty()) {
+                    crossCandidate = false;
                 }
 
-                (layer == RenderType.translucent() ? this.translucentVC : this.opaqueVC)
-                        .quad(quad, forceSolidLeaves, layer, modelState);
+                for (var quad : quads) {
+                    if (direction == null && crossCandidate) {
+                        int family = classifyGroundCrossQuad(quad.getVertices());
+                        if (family == 0) {
+                            crossCandidate = false;
+                        } else {
+                            diagonalFamilies |= family;
+                            unculledQuads++;
+                        }
+                    }
+
+                    (renderLayer == RenderType.translucent() ? this.translucentVC : this.opaqueVC)
+                            .quad(quad, forceSolidLeaves, renderLayer, modelState);
+                }
             }
         }
 

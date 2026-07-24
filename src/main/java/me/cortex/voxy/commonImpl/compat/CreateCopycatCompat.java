@@ -252,7 +252,7 @@ public final class CreateCopycatCompat {
         }
         try {
             ModelData modelData = buildModelData(material);
-            return new DomumOrnamentumCompat.BakePlan(modelData, null, material, -1, false);
+            return new DomumOrnamentumCompat.BakePlan(modelData, null, material, -1, false, false);
         } catch (Throwable ignored) {
             return DomumOrnamentumCompat.BakePlan.empty();
         }

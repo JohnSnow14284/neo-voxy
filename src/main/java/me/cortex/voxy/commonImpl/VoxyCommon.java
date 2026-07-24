@@ -25,7 +25,7 @@ public class VoxyCommon {
         if (modFile == null) {
             IS_IN_MINECRAFT = false;
             Logger.error("Running voxy without minecraft");
-            MOD_VERSION = "<UNKNOWN>";
+            MOD_VERSION = "0.3.3";
             IS_DEDICATED_SERVER = false;
         } else {
             IS_IN_MINECRAFT = true;
@@ -34,9 +34,8 @@ public class VoxyCommon {
                     .filter(m -> m.getModId().equals("voxy"))
                     .findFirst()
                     .map(m -> m.getVersion().toString())
-                    .orElse("<UNKNOWN>");
-            String commit = "unknown";
-            MOD_VERSION = version + "-" + commit;
+                    .orElse("0.3.3");
+            MOD_VERSION = version;
             IS_DEDICATED_SERVER = FMLLoader.getDist() == Dist.DEDICATED_SERVER;
             Serialization.init();
         }

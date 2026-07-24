@@ -17,8 +17,8 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 public final class VoxyJoinMessage {
     public static final VoxyJoinMessage INSTANCE = new VoxyJoinMessage();
 
-    private static final String REPO = "https://github.com/NHblock714/voxy";
-    private static final String MAINTAINER = "NHblock";
+    private static final String REPO = "https://github.com/NHblock-Johnsnow/neo-voxy";
+    private static final String MAINTAINER = "JohnSnow";
     private static final String QQ_GROUP = "1098491849";
     private static final int DELAY_TICKS = 20;
 
@@ -29,8 +29,10 @@ public final class VoxyJoinMessage {
 
     @SubscribeEvent
     public void onLoggingIn(ClientPlayerNetworkEvent.LoggingIn event) {
-        this.pending = VoxyConfig.CONFIG.showJoinMessage && !VoxyConfig.CONFIG.joinMessageShown
-                ? DELAY_TICKS : -1;
+        boolean showCredits = VoxyConfig.CONFIG.showJoinMessage
+                && !VoxyConfig.CONFIG.joinMessageShown;
+        boolean showUpgradeNotice = !VoxyConfig.CONFIG.upgradeCleanupNoticeShown;
+        this.pending = showCredits || showUpgradeNotice ? DELAY_TICKS : -1;
     }
 
     @SubscribeEvent
@@ -45,10 +47,16 @@ public final class VoxyJoinMessage {
         }
         var player = Minecraft.getInstance().player;
         if (player != null) {
-            player.displayClientMessage(header(), false);
-            player.displayClientMessage(credits(), false);
-            player.displayClientMessage(repo(), false);
-            VoxyConfig.CONFIG.joinMessageShown = true;
+            if (VoxyConfig.CONFIG.showJoinMessage && !VoxyConfig.CONFIG.joinMessageShown) {
+                player.displayClientMessage(header(), false);
+                player.displayClientMessage(credits(), false);
+                player.displayClientMessage(repo(), false);
+                VoxyConfig.CONFIG.joinMessageShown = true;
+            }
+            if (!VoxyConfig.CONFIG.upgradeCleanupNoticeShown) {
+                player.displayClientMessage(upgradeNotice(), false);
+                VoxyConfig.CONFIG.upgradeCleanupNoticeShown = true;
+            }
             VoxyConfig.CONFIG.save();
         }
     }
@@ -81,12 +89,17 @@ public final class VoxyJoinMessage {
         return Component.translatable("voxy.join.repo", link).withStyle(ChatFormatting.GRAY);
     }
 
+    private static Component upgradeNotice() {
+        return Component.translatable("voxy.join.upgradeCleanup")
+                .withStyle(ChatFormatting.YELLOW);
+    }
+
     //ModList is populated long before a world loads, so the clean values are available here; the
     //MOD_VERSION constant carries a commit suffix that is not worth showing.
     private static String version() {
         return ModList.get().getModContainerById("voxy")
                 .map(container -> container.getModInfo().getVersion().toString())
-                .orElse("unknown");
+                .orElse(me.cortex.voxy.commonImpl.VoxyCommon.MOD_VERSION);
     }
 
     private static String displayName() {
